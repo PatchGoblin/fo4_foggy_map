@@ -1,0 +1,33 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Generated assets: extracted from the game's own files, so not redistributable.
+# See assets/README.md for how to regenerate them.
+assets/*.png
+assets/*.dds
+assets/worldspaces.json
+
+# C++ build output
+plugin/build/
+plugin/out/
+plugin/.xmake/
+# xmake also drops a lock here if it is ever run from the repo root.
+.xmake/
+
+# Vendored toolchain and dependency clones (see README for how to restore them)
+.tools/
+plugin/extern/
+
+# Scratch and machine-specific files
+*.log
+scratch/
+local/
+!local/README.md
+
+# Local-only agent notes
+CLAUDE.md
+
+# Local design notes and specs
+docs/
