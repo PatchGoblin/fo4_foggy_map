@@ -97,17 +97,17 @@ extern "C" DLLEXPORT bool F4SEAPI F4SEPlugin_Load(const F4SE::LoadInterface* a_f
 	return true;
 }
 
-// The game is going away: take the companion with us so there is nothing left running.
+// The game is going away: ask the sampler to stop.
 //
-// Only signalling and a TerminateProcess call happen here. Waiting on our own thread
-// would risk a loader-lock deadlock, and by the time DLL_PROCESS_DETACH runs on
-// process exit Windows has already stopped the other threads anyway. At worst the
-// last second of movement goes unwritten.
+// Only signalling happens here. Waiting on our own thread would risk a loader-lock
+// deadlock, and by the time DLL_PROCESS_DETACH runs on process exit Windows has already
+// stopped the other threads anyway. At worst the last second of movement goes
+// unwritten. The companion needs nothing here: its job object ends it, and this
+// callback does not run at all when the game terminates itself or crashes.
 BOOL APIENTRY DllMain(HMODULE, DWORD a_reason, LPVOID)
 {
 	if (a_reason == DLL_PROCESS_DETACH) {
 		FoggyMap::Sampler::RequestStop();
-		FoggyMap::Companion::Terminate();
 	}
 	return TRUE;
 }

@@ -11,6 +11,31 @@ namespace FoggyMap::Companion
 	{
 		HANDLE g_process{ nullptr };
 
+		// A kill-on-close job that the companion lives in. Its handle is deliberately
+		// never closed: the kernel closes it when the game process ends -- however it
+		// ends, including crashes and TerminateProcess, where DllMain never runs -- and
+		// that takes the companion down with it.
+		HANDLE CompanionJob()
+		{
+			static const HANDLE job = [] {
+				HANDLE created = CreateJobObjectW(nullptr, nullptr);
+				if (!created) {
+					REX::WARN("could not create the companion job (error {})", GetLastError());
+					return HANDLE{ nullptr };
+				}
+				JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+				limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+				if (!SetInformationJobObject(
+						created, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) {
+					REX::WARN("could not configure the companion job (error {})", GetLastError());
+					CloseHandle(created);
+					return HANDLE{ nullptr };
+				}
+				return created;
+			}();
+			return job;
+		}
+
 		bool StillRunning()
 		{
 			if (!g_process) {
@@ -65,10 +90,14 @@ namespace FoggyMap::Companion
 		commandLine.push_back(L'\0');
 
 		// Handles must be inheritable for the child to write to the log.
+		//
+		// Started suspended so it is inside the job before it runs: the venv's pythonw
+		// is a launcher that spawns the real interpreter, and a child spawned before
+		// the assignment would escape the job and outlive the game.
 		const BOOL inherit = haveLog ? TRUE : FALSE;
 		const bool started = CreateProcessW(
 			nullptr, commandLine.data(), nullptr, nullptr, inherit,
-			CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process);
+			CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, nullptr, &startup, &process);
 		if (haveLog) {
 			CloseHandle(log);
 		}
@@ -77,23 +106,16 @@ namespace FoggyMap::Companion
 			return;
 		}
 
+		const HANDLE job = CompanionJob();
+		if (!job || !AssignProcessToJobObject(job, process.hProcess)) {
+			// Still worth running: the fog works, it just outlives the game.
+			REX::WARN("companion is not tied to the game (error {}); it will keep running after exit",
+				GetLastError());
+		}
+
+		ResumeThread(process.hThread);
 		CloseHandle(process.hThread);
 		g_process = process.hProcess;
 		REX::INFO("companion launched; its output goes to {}", logPath.string());
-	}
-
-	void Terminate()
-	{
-		if (!g_process) {
-			return;
-		}
-		if (StillRunning()) {
-			// The companion has no windows worth closing gracefully and holds no state
-			// of its own, so terminating it is safe.
-			TerminateProcess(g_process, 0);
-			REX::INFO("companion closed");
-		}
-		CloseHandle(g_process);
-		g_process = nullptr;
 	}
 }
