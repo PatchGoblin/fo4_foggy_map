@@ -1,8 +1,7 @@
-"""Launcher for the FoggyMap window.
+"""Launcher for the FoggyMap desktop window.
 
-A .pyw so pythonw.exe opens it without a console. The plugin starts this minimised
-when Fallout 4 launches and closes it when the game exits, but it is also fine to run
-by hand between sessions.
+A .pyw so pythonw.exe opens it without a console. Run it by hand whenever you want the
+detail view; the plugin launches the headless companion, not this.
 """
 
 import os
