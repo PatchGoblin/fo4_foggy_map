@@ -4,7 +4,8 @@
 -- single DLL that loads on the old-gen 1.10.163 runtime (F4SE 0.6.23) as well as
 -- next-gen, via Address Library and the Dear-Modding-FO4 CommonLibF4 fork.
 --
---   xmake f -m releasedbg --deploy_dir="D:/Modding/The Midnight Ride/mods/FoggyMap"
+--   xmake                                              -- build only
+--   xmake f --deploy_dir="<MO2 mods folder>/FoggyMap"  -- also copy into MO2
 --   xmake
 
 set_xmakever("3.0.0")
@@ -18,6 +19,10 @@ set_encodings("utf-8")
 set_runtimes("MT")
 
 add_rules("mode.debug", "mode.releasedbg")
+-- Only modes with a rule are allowed: the rule is what gives each target its own .pdb.
+-- Plain "release" has none, which left compiles sharing vc140.pdb and racing on it.
+set_allowedmodes("debug", "releasedbg")
+set_defaultmode("releasedbg")
 
 includes("extern/CommonLibF4")
 
@@ -47,7 +52,6 @@ target("FoggyMap")
         "/GS",
         "/guard:cf",
         "/utf-8",
-        "/Zi",
         "/permissive-",
         "/Zc:preprocessor",
         "/Zc:__cplusplus",
