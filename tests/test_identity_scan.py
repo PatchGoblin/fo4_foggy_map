@@ -25,10 +25,21 @@ def test_finds_a_utf16_term(tmp_path):
     assert find_leaks(str(tmp_path), [TERM]) == [("c.exe", TERM)]
 
 
-def test_default_terms_include_the_username_and_users_folder(monkeypatch):
+def test_default_terms_include_the_username_and_profile_folder(monkeypatch):
+    """The profile folder can differ from the username, and both identify the maintainer."""
     monkeypatch.setenv("USERNAME", "probe_user")
+    monkeypatch.setenv("USERPROFILE", r"C:\Users\probe_profile")
 
     terms = default_terms()
 
     assert "probe_user" in terms
-    assert "\\Users\\" in terms
+    assert "probe_profile" in terms
+
+
+def test_other_peoples_users_paths_are_not_leaks(monkeypatch, tmp_path):
+    """numpy and scipy ship paths from their CI machines; those name nobody here."""
+    monkeypatch.setenv("USERNAME", "probe_user")
+    monkeypatch.setenv("USERPROFILE", r"C:\Users\probe_profile")
+    (tmp_path / "scipy.pyd").write_bytes(b"C:\\Users\\runneradmin\\build /Users/runner/x")
+
+    assert find_leaks(str(tmp_path), default_terms()) == []

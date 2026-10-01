@@ -1,7 +1,7 @@
 """Refuse to ship anything that names the maintainer.
 
-Scans every file under a folder for the Windows username, the global git identity,
-and any \\Users\\ path -- in ASCII and UTF-16, and inside PyInstaller's compressed
+Scans every file under a folder for the Windows username, the profile folder name and
+the global git identity -- in ASCII and UTF-16, and inside PyInstaller's compressed
 archives, where frozen code records the paths it was built from.
 
     python tools/identity_scan.py dist/stage
@@ -15,7 +15,14 @@ import sys
 
 
 def default_terms() -> list[str]:
-    terms = [os.environ.get("USERNAME", "")]
+    """What names the maintainer, read from this machine at scan time and never stored.
+
+    The profile folder is its own term because it can differ from the username. A bare
+    \\Users\\ is deliberately not one: numpy and scipy ship paths from their CI machines
+    (runneradmin, runner), which name nobody here and would block every release.
+    """
+    profile = os.path.basename(os.environ.get("USERPROFILE", "").rstrip("\\/"))
+    terms = [os.environ.get("USERNAME", ""), profile]
     for key in ("user.name", "user.email"):
         try:
             terms.append(subprocess.run(
@@ -23,7 +30,6 @@ def default_terms() -> list[str]:
             ).stdout.strip())
         except OSError:
             pass
-    terms += ["\\Users\\", "/Users/"]
     return [term for term in terms if term]
 
 
