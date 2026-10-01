@@ -68,14 +68,17 @@ namespace FoggyMap::Companion
 			return ModulePath(nullptr).parent_path() / L"Data";
 		}
 
-		// Quoted for the command line. A trailing backslash is dropped first: inside
-		// quotes, \" is an escaped quote, so "D:\Fog\" would swallow every later argument.
+		// Quoted for the command line. Inside quotes, backslashes before the closing quote
+		// escape it, so "D:\Fog\" or "D:\" would swallow every later argument. Doubling
+		// trailing backslashes is the standard rule: the child reads them back as written.
 		std::wstring Quoted(const std::filesystem::path& a_path)
 		{
 			std::wstring text = a_path.wstring();
-			while (text.size() > 3 && (text.back() == L'\\' || text.back() == L'/')) {
-				text.pop_back();
+			std::size_t  trailing = 0;
+			while (trailing < text.size() && text[text.size() - 1 - trailing] == L'\\') {
+				++trailing;
 			}
+			text.append(trailing, L'\\');
 			return L"\"" + text + L"\"";
 		}
 	}
@@ -127,14 +130,14 @@ namespace FoggyMap::Companion
 		if (command.empty()) {
 			const auto bundled = PluginDirectory() / L"FoggyMap" / L"FoggyMapCompanion.exe";
 			if (!std::filesystem::exists(bundled, error)) {
-				REX::WARN("companion not found at {}; the Pip-Boy fog will not update", bundled.string());
+				REX::WARN("companion not found at {}; the Pip-Boy fog will not update", PathText(bundled));
 				return;
 			}
 			command = Quoted(bundled);
 		}
 		std::wstring commandLine = command + L" --data " + Quoted(config.outputDir) +
 		                           L" --game-data " + Quoted(GameDataDirectory());
-		REX::INFO("companion command: {}", std::filesystem::path{ commandLine }.string());
+		REX::INFO("companion command: {}", PathText(commandLine));
 		// CreateProcessW may modify the command line buffer, so the copy above is ours.
 		commandLine.push_back(L'\0');
 
@@ -165,6 +168,6 @@ namespace FoggyMap::Companion
 		ResumeThread(process.hThread);
 		CloseHandle(process.hThread);
 		g_process = process.hProcess;
-		REX::INFO("companion launched; its output goes to {}", logPath.string());
+		REX::INFO("companion launched; its output goes to {}", PathText(logPath));
 	}
 }

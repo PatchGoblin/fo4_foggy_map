@@ -32,15 +32,15 @@ namespace FoggyMap
 		file.read(reinterpret_cast<char*>(&image.width), sizeof(image.width));
 		file.read(reinterpret_cast<char*>(&image.height), sizeof(image.height));
 		if (!file) {
-			REX::WARN("fog file {} is truncated in its header", a_path.string());
+			REX::WARN("fog file {} is truncated in its header", PathText(a_path));
 			return {};
 		}
 		if (magic != kMagic || version != kVersion) {
-			REX::WARN("fog file {} has an unexpected header", a_path.string());
+			REX::WARN("fog file {} has an unexpected header", PathText(a_path));
 			return {};
 		}
 		if (image.width > kMaxDimension || image.height > kMaxDimension) {
-			REX::WARN("fog file {} claims an implausible size", a_path.string());
+			REX::WARN("fog file {} claims an implausible size", PathText(a_path));
 			return {};
 		}
 
@@ -48,7 +48,7 @@ namespace FoggyMap
 		image.pixels.resize(count);
 		file.read(reinterpret_cast<char*>(image.pixels.data()), static_cast<std::streamsize>(count));
 		if (static_cast<std::size_t>(file.gcount()) != count) {
-			REX::WARN("fog file {} is truncated in its pixels", a_path.string());
+			REX::WARN("fog file {} is truncated in its pixels", PathText(a_path));
 			return {};
 		}
 		return image;

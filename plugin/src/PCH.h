@@ -29,3 +29,18 @@
 #include <vector>
 
 using namespace std::literals;
+
+namespace FoggyMap
+{
+	// A path as UTF-8, for logging. path::string() converts through the ANSI code page
+	// and throws on any character it cannot represent -- a Cyrillic or CJK folder name
+	// on a Western-locale system -- which would crash the game over a log line.
+	inline std::string PathText(const std::filesystem::path& a_path)
+	{
+		std::string text;
+		if (!REX::UTF16_TO_UTF8(a_path.native(), text)) {
+			return "<unprintable path>";
+		}
+		return text;
+	}
+}

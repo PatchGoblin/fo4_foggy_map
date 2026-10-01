@@ -47,7 +47,7 @@ namespace FoggyMap::Recorder
 			std::error_code error;
 			std::filesystem::create_directories(a_dir, error);
 			if (error) {
-				REX::ERROR("cannot create {}: {}", a_dir.string(), error.message());
+				REX::ERROR("cannot create {}: {}", PathText(a_dir), error.message());
 				return false;
 			}
 			return true;
@@ -115,7 +115,7 @@ namespace FoggyMap::Recorder
 			const bool isNew = !std::filesystem::exists(file);
 			std::ofstream out{ file, std::ios::app };
 			if (!out) {
-				REX::ERROR("cannot open {}", file.string());
+				REX::ERROR("cannot open {}", PathText(file));
 				return;
 			}
 			if (isNew) {
@@ -149,7 +149,7 @@ namespace FoggyMap::Recorder
 
 		std::ofstream out{ temporary, std::ios::trunc };
 		if (!out) {
-			REX::ERROR("cannot open {}", temporary.string());
+			REX::ERROR("cannot open {}", PathText(temporary));
 			return;
 		}
 		out << "worldspace,form_id,name,x,y,radius,marker_type,discovered\n";
@@ -205,7 +205,7 @@ namespace FoggyMap::Recorder
 		std::error_code error;
 		std::filesystem::rename(temporary, file, error);
 		if (error) {
-			REX::ERROR("cannot replace {}: {}", file.string(), error.message());
+			REX::ERROR("cannot replace {}: {}", PathText(file), error.message());
 			return;
 		}
 

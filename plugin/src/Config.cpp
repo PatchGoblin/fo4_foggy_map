@@ -99,7 +99,7 @@ namespace FoggyMap
 		// of metres, far more than the player covers in a second.
 		sampleIntervalMs = std::max<std::uint32_t>(sampleIntervalMs, 250);
 
-		REX::INFO("output dir: {}", outputDir.string());
+		REX::INFO("output dir: {}", PathText(outputDir));
 		REX::INFO("sample interval: {} ms, min move: {} units", sampleIntervalMs, minMoveUnits);
 	}
 }
