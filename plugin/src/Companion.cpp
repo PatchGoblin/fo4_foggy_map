@@ -43,12 +43,47 @@ namespace FoggyMap::Companion
 			}
 			return WaitForSingleObject(g_process, 0) == WAIT_TIMEOUT;
 		}
+
+		std::filesystem::path ModulePath(HMODULE a_module)
+		{
+			std::wstring buffer(32768, L'\0');
+			const auto   length = GetModuleFileNameW(a_module, buffer.data(), static_cast<DWORD>(buffer.size()));
+			buffer.resize(length);
+			return buffer;
+		}
+
+		// Our own DLL, found from an address inside it. Under MO2 this is the virtual
+		// Data\F4SE\Plugins path, which MO2's VFS also resolves for the child process.
+		std::filesystem::path PluginDirectory()
+		{
+			HMODULE self{ nullptr };
+			GetModuleHandleExW(
+				GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+				reinterpret_cast<LPCWSTR>(&PluginDirectory), &self);
+			return ModulePath(self).parent_path();
+		}
+
+		std::filesystem::path GameDataDirectory()
+		{
+			return ModulePath(nullptr).parent_path() / L"Data";
+		}
+
+		// Quoted for the command line. A trailing backslash is dropped first: inside
+		// quotes, \" is an escaped quote, so "D:\Fog\" would swallow every later argument.
+		std::wstring Quoted(const std::filesystem::path& a_path)
+		{
+			std::wstring text = a_path.wstring();
+			while (text.size() > 3 && (text.back() == L'\\' || text.back() == L'/')) {
+				text.pop_back();
+			}
+			return L"\"" + text + L"\"";
+		}
 	}
 
 	void Launch()
 	{
 		const auto& config = Config::Get();
-		if (!config.autoLaunchCompanion || config.companionCommand.empty()) {
+		if (!config.autoLaunchCompanion) {
 			return;
 		}
 		if (StillRunning()) {
@@ -85,8 +120,22 @@ namespace FoggyMap::Companion
 
 		PROCESS_INFORMATION process{};
 
-		// CreateProcessW may modify the command line buffer, so hand it a copy.
-		std::wstring commandLine = config.companionCommand;
+		// The bundled companion sits beside this DLL; CompanionCommand overrides it, which
+		// is how a developer runs it from a venv instead. Either way it is told where the
+		// data and the game are, rather than guessing.
+		std::wstring command = config.companionCommand;
+		if (command.empty()) {
+			const auto bundled = PluginDirectory() / L"FoggyMap" / L"FoggyMapCompanion.exe";
+			if (!std::filesystem::exists(bundled, error)) {
+				REX::WARN("companion not found at {}; the Pip-Boy fog will not update", bundled.string());
+				return;
+			}
+			command = Quoted(bundled);
+		}
+		std::wstring commandLine = command + L" --data " + Quoted(config.outputDir) +
+		                           L" --game-data " + Quoted(GameDataDirectory());
+		REX::INFO("companion command: {}", std::filesystem::path{ commandLine }.string());
+		// CreateProcessW may modify the command line buffer, so the copy above is ours.
 		commandLine.push_back(L'\0');
 
 		// Handles must be inheritable for the child to write to the log.

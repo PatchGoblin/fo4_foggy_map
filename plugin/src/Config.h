@@ -21,11 +21,11 @@ namespace FoggyMap
 		// still represented.
 		std::uint32_t forceSampleSeconds{ 30 };
 
-		// Command line for the companion process -- normally the headless fog exporter, which
-		// is what keeps the in-game Pip-Boy fog current. Launched when the game starts and
-		// terminated when it exits. Empty disables it, which also freezes the in-game fog.
+		// The companion keeps the in-game Pip-Boy fog current. Empty means the bundled
+		// FoggyMap\FoggyMapCompanion.exe beside the DLL; set it to run another build, such
+		// as a venv during development. The plugin appends --data and --game-data either way.
 		std::wstring companionCommand;
-		bool         autoLaunchCompanion{ false };
+		bool         autoLaunchCompanion{ true };
 
 		// Draw the fog on the in-game Pip-Boy world map, as a vector layer attached to the
 		// map's own texture holder so it inherits the map's pan and zoom.
