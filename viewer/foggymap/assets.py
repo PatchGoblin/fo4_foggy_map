@@ -116,6 +116,14 @@ def build_assets(data_dir: str, out_dir, sources=MAP_SOURCES) -> dict:
             "image": image_name,
         }
 
-    with open(os.path.join(out_dir, MANIFEST_NAME), "w", encoding="utf-8") as handle:
-        json.dump(manifest, handle, indent=2)
+    # Written aside and renamed into place, so the manifest never exists half-written.
+    final = os.path.join(out_dir, MANIFEST_NAME)
+    partial = final + ".partial"
+    try:
+        with open(partial, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, indent=2)
+        os.replace(partial, final)
+    finally:
+        if os.path.exists(partial):
+            os.remove(partial)
     return manifest

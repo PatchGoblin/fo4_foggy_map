@@ -87,3 +87,49 @@ def test_reports_the_paths_it_was_given(tmp_path, capsys):
     out = capsys.readouterr().out
     assert f"data: {tmp_path}" in out
     assert r"game data: X:\Game\Data" in out
+
+
+def _install(game_data, *names):
+    game_data.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (game_data / name).write_bytes(b"")
+
+
+def test_dlc_installed_since_the_last_build_triggers_a_rebuild(tmp_path):
+    """Otherwise a player who buys Far Harbor later never gets fog there."""
+    data = tmp_path / "data"
+    _write_manifest(data / "assets")  # Commonwealth only
+    game = tmp_path / "Data"
+    _install(game, "DLCCoast.esm", "DLCCoast - Textures.ba2")
+    build = Recorder()
+
+    main(["--data", str(data), "--game-data", str(game)], watch_fn=Recorder(), build_fn=build)
+
+    assert build.calls == [(str(game), str(data / "assets"))]
+
+
+def test_a_failed_rebuild_keeps_watching_with_the_assets_it_has(tmp_path, capsys):
+    data = tmp_path / "data"
+    _write_manifest(data / "assets")
+    game = tmp_path / "Data"
+    _install(game, "DLCCoast.esm", "DLCCoast - Textures.ba2")
+    watch = Recorder()
+
+    code = main(["--data", str(data), "--game-data", str(game)],
+                watch_fn=watch, build_fn=Recorder(error=ValueError("corrupt archive")))
+
+    assert code == 0
+    assert watch.calls == [(str(data / "assets"), str(data))]
+    assert "corrupt archive" in capsys.readouterr().out
+
+
+def test_an_unreadable_manifest_is_rebuilt(tmp_path):
+    """A manifest cut short by a kill mid-write must not wedge every later launch."""
+    data = tmp_path / "data"
+    (data / "assets").mkdir(parents=True)
+    (data / "assets" / "worldspaces.json").write_text("")
+    build = Recorder()
+
+    main(["--data", str(data), "--game-data", "unused"], watch_fn=Recorder(), build_fn=build)
+
+    assert build.calls == [("unused", str(data / "assets"))]

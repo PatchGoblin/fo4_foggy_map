@@ -113,3 +113,20 @@ def test_a_failure_part_way_leaves_no_manifest(tmp_path, fake_readers):
 
     assert not (out / "worldspaces.json").exists()
     assert not out.exists() or not any(out.iterdir())
+
+
+def test_a_failed_manifest_write_leaves_no_manifest(tmp_path, fake_readers, monkeypatch):
+    """The manifest only appears once fully written, so a kill mid-write is rebuilt."""
+    game = tmp_path / "Data"
+    _install(game, "Fallout4.esm", "Fallout4 - Textures6.ba2")
+    out = tmp_path / "assets"
+
+    def interrupted(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(assets.json, "dump", interrupted)
+
+    with pytest.raises(OSError):
+        build_assets(str(game), out, SOURCES)
+
+    assert not (out / "worldspaces.json").exists()
