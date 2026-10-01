@@ -9,6 +9,10 @@ assets/*.png
 assets/*.dds
 assets/worldspaces.json
 
+# Release packaging (tools/package_release.ps1)
+/build/
+/dist/
+
 # C++ build output
 plugin/build/
 plugin/out/

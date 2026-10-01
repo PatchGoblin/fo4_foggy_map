@@ -57,7 +57,7 @@ launching anything, and everything works with the game closed.
 ```powershell
 # Python side
 py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install numpy scipy pillow pytest PySide6
+.\.venv\Scripts\python.exe -m pip install numpy scipy pillow pytest PySide6 pyinstaller
 
 # Base maps and worldspace bounds, read out of the installed game files
 .\.venv\Scripts\python.exe tools\build_assets.py
@@ -88,11 +88,33 @@ The build copies the DLL and INI straight into its own MO2 mod folder. Enable it
 Mod Organizer like any other mod; disabling it removes FoggyMap completely, since
 there is no ESP and nothing is written into your saves.
 
+A development build deploys no companion executable, so set `CompanionCommand` in the
+deployed `FoggyMap.ini` to run it from your checkout:
+
+```ini
+CompanionCommand="<repo>\.venv\Scripts\pythonw.exe" "<repo>\viewer\export_fog.pyw"
+```
+
+### Releasing
+
+```powershell
+.\tools\package_release.ps1
+```
+
+Runs the tests, builds the plugin in `release` mode (no debug symbols), freezes the
+companion with PyInstaller, and writes `dist\FoggyMap-<version>.zip` laid out for MO2 or
+Vortex. The version comes from `set_version` in `plugin\xmake.lua`. The release build
+uses its own xmake config, so your development config is untouched and nothing is
+deployed. It refuses to zip anything containing your Windows username, profile folder
+name or git identity.
+
 ## Using it
 
 The fog appears on the **Pip-Boy world map itself**, drawn as a layer over the real map.
-The plugin launches a headless exporter (`export_fog.pyw`) alongside the game to keep it
-current; there is nothing to start or shut down.
+The plugin launches the companion (`FoggyMapCompanion.exe`, shipped with the mod)
+alongside the game to keep it current; there is nothing to start or shut down. On first
+launch it builds the map images from your own game files into
+`%LOCALAPPDATA%\FoggyMap\assets`.
 
 The desktop window is optional and no longer auto-launched — run it when you want the
 detail view, marker names and hover readouts:
@@ -135,8 +157,8 @@ For a still image instead of a window:
 | `SampleIntervalMs` | 1000 | how often your position is captured |
 | `MinMoveUnits` | 256 | ignore samples closer than this to the last one (70 units = 1 m) |
 | `ForceSampleSeconds` | 30 | record anyway after this long, so idle time still shows |
-| `AutoLaunchCompanion` | 1 | start and stop the headless fog exporter with the game |
-| `CompanionCommand` | — | full command line for it; output goes to `companion.log` |
+| `AutoLaunchCompanion` | 1 | start the companion with the game; the game's exit ends it |
+| `CompanionCommand` | — | run a different companion (e.g. a repo checkout); `--data` and `--game-data` are appended. Output goes to `companion.log` |
 | `PipboyOverlay` | 1 | draw the fog on the in-game Pip-Boy map |
 | `PipboyFogStrength` | 0.85 | how heavy the fog looks at its densest |
 | `PipboyFogGrid` | 256 | cells across the map; higher looks less like a grid |

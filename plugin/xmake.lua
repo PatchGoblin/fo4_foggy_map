@@ -18,10 +18,11 @@ set_languages("c++23")
 set_encodings("utf-8")
 set_runtimes("MT")
 
-add_rules("mode.debug", "mode.releasedbg")
--- Only modes with a rule are allowed: the rule is what gives each target its own .pdb.
--- Plain "release" has none, which left compiles sharing vc140.pdb and racing on it.
-set_allowedmodes("debug", "releasedbg")
+-- releasedbg for development (symbols, so crashes are readable); release for what ships,
+-- with no symbols at all, so the DLL records nothing about the machine that built it.
+-- Every allowed mode has a rule: without one, compiles shared vc140.pdb and raced on it.
+add_rules("mode.debug", "mode.releasedbg", "mode.release")
+set_allowedmodes("debug", "releasedbg", "release")
 set_defaultmode("releasedbg")
 
 includes("extern/CommonLibF4")
@@ -61,7 +62,9 @@ target("FoggyMap")
         "/wd4100",
         { force = true, tools = { "cl" } }
     )
-    add_ldflags(
+    -- shflags, not ldflags: a DLL is linked with the shared-library flags, and ldflags
+    -- (executables only) were silently ignored here.
+    add_shflags(
         "/DYNAMICBASE",
         "/NXCOMPAT",
         "/HIGHENTROPYVA",
