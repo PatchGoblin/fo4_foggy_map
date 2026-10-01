@@ -50,6 +50,10 @@ MAP_SOURCES = (
 )
 
 
+class AssetsUnavailable(Exception):
+    """None of the worldspaces could be built: the game files are not where we looked."""
+
+
 def _base_intensity(image: Image.Image) -> Image.Image:
     """Reduce a map texture to a single intensity channel for the viewer to tint.
 
@@ -65,24 +69,43 @@ def _base_intensity(image: Image.Image) -> Image.Image:
     return luminance
 
 
-def build_assets(data_dir: str, out_dir) -> dict:
-    """Extract each map image to ``out_dir`` and return (and write) the manifest."""
-    out_dir = str(out_dir)
-    os.makedirs(out_dir, exist_ok=True)
+def build_assets(data_dir: str, out_dir, sources=MAP_SOURCES) -> dict:
+    """Extract each available map image to ``out_dir`` and return (and write) the manifest.
 
-    manifest: dict[str, dict] = {}
-    for source in MAP_SOURCES:
-        bounds = read_worldspace_map_data(os.path.join(data_dir, source.esm))
+    A worldspace whose ESM or archive is absent -- DLC the player does not own -- is
+    skipped and named. Everything is read before anything is written, and the manifest
+    is written last, so its presence means the assets are complete.
+    """
+    out_dir = str(out_dir)
+    loaded = []
+    missing: list[str] = []
+
+    for source in sources:
+        esm = os.path.join(data_dir, source.esm)
+        archive = os.path.join(data_dir, source.archive)
+        absent = [os.path.basename(p) for p in (esm, archive) if not os.path.isfile(p)]
+        if absent:
+            missing.extend(absent)
+            print(f"skipped {source.editor_id}: missing {', '.join(absent)}", flush=True)
+            continue
+
+        bounds = read_worldspace_map_data(esm)
         if source.editor_id not in bounds:
             raise KeyError(f"{source.editor_id} has no map data in {source.esm}")
-        map_data = bounds[source.editor_id]
-
-        dds = extract_texture(os.path.join(data_dir, source.archive), source.texture)
+        dds = extract_texture(archive, source.texture)
         image = _base_intensity(Image.open(io.BytesIO(dds)))
+        loaded.append((source, bounds[source.editor_id], image))
 
+    if not loaded:
+        raise AssetsUnavailable(
+            f"no map could be built from {data_dir}; missing {', '.join(missing)}"
+        )
+
+    os.makedirs(out_dir, exist_ok=True)
+    manifest: dict[str, dict] = {}
+    for source, map_data, image in loaded:
         image_name = f"worldmap_{source.editor_id}.png"
         image.save(os.path.join(out_dir, image_name), optimize=True)
-
         manifest[source.editor_id] = {
             "editor_id": source.editor_id,
             "form_id": f"0x{map_data.form_id:08X}",
