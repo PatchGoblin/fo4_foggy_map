@@ -7,7 +7,7 @@ import numpy
 import pytest
 from PIL import Image
 
-from build_assets import build_assets
+from foggymap.assets import build_assets
 from foggymap.grid import Grid
 
 from game_paths import data_dir

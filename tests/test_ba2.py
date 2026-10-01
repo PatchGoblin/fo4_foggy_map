@@ -6,7 +6,7 @@ import os
 import pytest
 from PIL import Image
 
-from ba2 import extract_texture, list_files
+from foggymap.ba2 import extract_texture, list_files
 
 from game_paths import data_dir
 

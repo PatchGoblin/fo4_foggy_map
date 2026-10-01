@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from fo4_esm import read_worldspace_map_data
+from foggymap.fo4_esm import read_worldspace_map_data
 
 from game_paths import data_dir
 

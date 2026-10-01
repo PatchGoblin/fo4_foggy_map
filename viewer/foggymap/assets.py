@@ -1,0 +1,98 @@
+"""Building the base map images and worldspace manifest from installed game files.
+
+Runs on the player's machine, on the companion's first launch: the images are
+Bethesda's, so they can be extracted but never shipped.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import os
+from dataclasses import dataclass
+
+from PIL import Image
+
+from foggymap.ba2 import extract_texture
+from foggymap.fo4_esm import read_worldspace_map_data
+from foggymap.pipeline import MANIFEST_NAME
+
+
+@dataclass(frozen=True)
+class MapSource:
+    """Where one worldspace's map bounds and map image live inside the game files."""
+
+    editor_id: str
+    esm: str
+    archive: str
+    texture: str
+
+
+MAP_SOURCES = (
+    MapSource(
+        editor_id="Commonwealth",
+        esm="Fallout4.esm",
+        archive="Fallout4 - Textures6.ba2",
+        texture=r"Textures\Interface\Pip-Boy\WorldMap_d.DDS",
+    ),
+    MapSource(
+        editor_id="DLC03FarHarbor",
+        esm="DLCCoast.esm",
+        archive="DLCCoast - Textures.ba2",
+        texture=r"Textures\DLC03\Interface\Map\MapFarHarbor.DDS",
+    ),
+    MapSource(
+        editor_id="NukaWorld",
+        esm="DLCNukaWorld.esm",
+        archive="DLCNukaWorld - Textures.ba2",
+        texture=r"Textures\DLC04\Interface\Map\NukaWorldMap.DDS",
+    ),
+)
+
+
+def _base_intensity(image: Image.Image) -> Image.Image:
+    """Reduce a map texture to a single intensity channel for the viewer to tint.
+
+    The Commonwealth and Far Harbor maps carry their artwork in RGB. The Nuka-World
+    map leaves RGB entirely black and stores the map as an alpha mask, so converting
+    it to RGB yields a blank image.
+    """
+    rgba = image.convert("RGBA")
+    red, green, blue, alpha = rgba.split()
+    luminance = rgba.convert("L")
+    if max(red.getextrema()[1], green.getextrema()[1], blue.getextrema()[1]) == 0:
+        return alpha
+    return luminance
+
+
+def build_assets(data_dir: str, out_dir) -> dict:
+    """Extract each map image to ``out_dir`` and return (and write) the manifest."""
+    out_dir = str(out_dir)
+    os.makedirs(out_dir, exist_ok=True)
+
+    manifest: dict[str, dict] = {}
+    for source in MAP_SOURCES:
+        bounds = read_worldspace_map_data(os.path.join(data_dir, source.esm))
+        if source.editor_id not in bounds:
+            raise KeyError(f"{source.editor_id} has no map data in {source.esm}")
+        map_data = bounds[source.editor_id]
+
+        dds = extract_texture(os.path.join(data_dir, source.archive), source.texture)
+        image = _base_intensity(Image.open(io.BytesIO(dds)))
+
+        image_name = f"worldmap_{source.editor_id}.png"
+        image.save(os.path.join(out_dir, image_name), optimize=True)
+
+        manifest[source.editor_id] = {
+            "editor_id": source.editor_id,
+            "form_id": f"0x{map_data.form_id:08X}",
+            "nw_cell": [map_data.nw_cell_x, map_data.nw_cell_y],
+            "se_cell": [map_data.se_cell_x, map_data.se_cell_y],
+            "width_px": image.width,
+            "height_px": image.height,
+            "image": image_name,
+        }
+
+    with open(os.path.join(out_dir, MANIFEST_NAME), "w", encoding="utf-8") as handle:
+        json.dump(manifest, handle, indent=2)
+    return manifest

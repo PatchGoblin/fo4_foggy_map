@@ -42,7 +42,7 @@ is precisely what the area fog layer is for.
 ```
 plugin/    F4SE plugin (C++): records position, dumps markers, draws the Pip-Boy overlay
 viewer/    Python: foggymap/ is the library, the .pyw/.py files are entry points
-tools/     one-off asset prep: BA2 extraction and ESM reading
+tools/     developer and release tooling: asset CLI, release packaging
 tests/     pytest, covering everything in viewer/ and tools/
 assets/    generated and gitignored -- Bethesda's data, see assets/README.md
 local/     gitignored scratch for machine-specific files
