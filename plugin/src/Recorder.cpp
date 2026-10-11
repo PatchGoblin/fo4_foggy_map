@@ -9,6 +9,10 @@ namespace FoggyMap::Recorder
 	{
 		std::mutex g_writeLock;
 
+		// The last markers.csv written, so an unchanged snapshot is skipped. Main
+		// thread only, like WriteMarkers itself.
+		std::string g_lastMarkers;
+
 		// MapMarkerData's members are private in CommonLibF4, so they are read by
 		// offset instead. Layout from RE/M/MapMarkerData.h: TESFullName base occupies
 		// 0x00-0x0F, then flags 0x10, originalFlags 0x11, type 0x12.
@@ -139,20 +143,9 @@ namespace FoggyMap::Recorder
 			return;
 		}
 
-		const auto& config = Config::Get();
-		if (!EnsureOutputDir(config.outputDir)) {
-			return;
-		}
+		const auto started = std::chrono::steady_clock::now();
 
-		const auto file = config.outputDir / "markers.csv";
-		const auto temporary = config.outputDir / "markers.csv.tmp";
-
-		std::ofstream out{ temporary, std::ios::trunc };
-		if (!out) {
-			REX::ERROR("cannot open {}", PathText(temporary));
-			return;
-		}
-		out << "worldspace,form_id,name,x,y,radius,marker_type,discovered\n";
+		std::string out = "worldspace,form_id,name,x,y,radius,marker_type,discovered\n";
 
 		std::size_t total = 0;
 		std::size_t discovered = 0;
@@ -185,7 +178,7 @@ namespace FoggyMap::Recorder
 					name = full;
 				}
 
-				out << std::format(
+				out += std::format(
 					"{},0x{:08X},{},{:.2f},{:.2f},,{},{}\n",
 					worldspaceId,
 					marker->formID,
@@ -199,7 +192,29 @@ namespace FoggyMap::Recorder
 				discovered += isDiscovered ? 1 : 0;
 			}
 		}
-		out.close();
+
+		// Called every few seconds, so an unchanged snapshot is not written: a write
+		// makes the companion re-render every worldspace.
+		if (out == g_lastMarkers) {
+			return;
+		}
+
+		const auto& config = Config::Get();
+		if (!EnsureOutputDir(config.outputDir)) {
+			return;
+		}
+
+		const auto file = config.outputDir / "markers.csv";
+		const auto temporary = config.outputDir / "markers.csv.tmp";
+
+		{
+			std::ofstream stream{ temporary, std::ios::trunc };
+			if (!stream) {
+				REX::ERROR("cannot open {}", PathText(temporary));
+				return;
+			}
+			stream << out;
+		}
 
 		// Swap into place so the companion never reads a half-written file.
 		std::error_code error;
@@ -208,7 +223,11 @@ namespace FoggyMap::Recorder
 			REX::ERROR("cannot replace {}: {}", PathText(file), error.message());
 			return;
 		}
+		g_lastMarkers = std::move(out);
 
-		REX::INFO("wrote {} map markers ({} discovered)", total, discovered);
+		const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+			std::chrono::steady_clock::now() - started);
+		REX::INFO(
+			"wrote {} map markers ({} discovered) in {} us", total, discovered, elapsed.count());
 	}
 }

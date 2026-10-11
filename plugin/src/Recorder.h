@@ -21,7 +21,8 @@ namespace FoggyMap
 		void AppendSamples(const std::vector<Sample>& a_samples);
 
 		// Rewrites markers.csv from the live game state, so mod-added markers and
-		// discovered flags are all included. Must run on the main thread.
+		// discovered flags are all included. Skips the write when nothing changed, so
+		// it is cheap to call repeatedly. Must run on the main thread.
 		void WriteMarkers();
 	}
 }

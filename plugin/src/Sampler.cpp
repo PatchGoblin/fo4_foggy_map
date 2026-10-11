@@ -68,6 +68,23 @@ namespace FoggyMap::Sampler
 				Sample{ std::string{ worldspaceId }, NowMs(), location.x, location.y, location.z });
 		}
 
+		// Discovering a location lifts the fog around its marker, but the discovered
+		// flags only reached markers.csv on save load, so a new discovery stayed fogged
+		// until the next load. Re-checking every few seconds gets it to the companion
+		// well before the player opens the map. Runs on the main thread.
+		constexpr std::chrono::seconds kMarkerRefreshInterval{ 5 };
+		std::chrono::steady_clock::time_point g_lastMarkerRefresh{};
+
+		void RefreshMarkers()
+		{
+			const auto now = std::chrono::steady_clock::now();
+			if (now - g_lastMarkerRefresh < kMarkerRefreshInterval) {
+				return;
+			}
+			g_lastMarkerRefresh = now;
+			Recorder::WriteMarkers();
+		}
+
 		std::vector<Sample> DrainPending()
 		{
 			const std::scoped_lock lock{ g_pendingLock };
@@ -87,8 +104,8 @@ namespace FoggyMap::Sampler
 					// menu tree off-thread could race with the game changing them.
 					tasks->AddTask([]() {
 						Capture();
+						RefreshMarkers();
 						PipboyOverlay::Draw();
-						
 					});
 				}
 				std::this_thread::sleep_for(interval);
