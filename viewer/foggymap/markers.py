@@ -53,6 +53,9 @@ def load_pois(csv_path, worldspace: str | None = None) -> list[Poi]:
                 )
             except (KeyError, TypeError, ValueError):
                 continue  # a partially flushed final row
+            # A disabled marker is not on the game's map and can never be discovered.
+            if (row.get("disabled") or "").strip() in ("1", "true", "True"):
+                continue
             if worldspace is None or poi.worldspace == worldspace:
                 pois.append(poi)
     return pois

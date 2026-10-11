@@ -56,6 +56,29 @@ def test_load_pois_can_filter_to_one_worldspace(tmp_path):
     assert [p.name for p in load_pois(csv, worldspace="NukaWorld")] == ["B"]
 
 
+def test_load_pois_skips_disabled_markers(tmp_path):
+    """A disabled marker never shows on the map and can never be discovered.
+
+    Bethesda parks cut locations such as Union's Hope Cathedral behind an initially
+    disabled enable parent; treating them as POIs left permanent undiscovered discs.
+    """
+    csv = tmp_path / "markers.csv"
+    csv.write_text(
+        f"{HEADER},disabled\n"
+        "Commonwealth,0x1,Shown,0,0,,1,0,0\n"
+        "Commonwealth,0x000A96E0,Cambridge Graveyard,0,0,,30,0,1\n"
+    )
+
+    assert [p.name for p in load_pois(csv)] == ["Shown"]
+
+
+def test_load_pois_reads_a_csv_from_before_the_disabled_column(tmp_path):
+    csv = tmp_path / "markers.csv"
+    csv.write_text(f"{HEADER}\nCommonwealth,0x1,Old,0,0,,1,0\n")
+
+    assert [p.name for p in load_pois(csv)] == ["Old"]
+
+
 def test_disc_mask_covers_the_requested_world_radius():
     radius = 2048.0
 

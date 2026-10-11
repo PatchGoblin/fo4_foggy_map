@@ -145,10 +145,11 @@ namespace FoggyMap::Recorder
 
 		const auto started = std::chrono::steady_clock::now();
 
-		std::string out = "worldspace,form_id,name,x,y,radius,marker_type,discovered\n";
+		std::string out = "worldspace,form_id,name,x,y,radius,marker_type,discovered,disabled\n";
 
 		std::size_t total = 0;
 		std::size_t discovered = 0;
+		std::size_t disabled = 0;
 
 		for (auto* worldspace : handler->GetFormArray<RE::TESWorldSpace>()) {
 			if (!worldspace) {
@@ -172,6 +173,11 @@ namespace FoggyMap::Recorder
 
 				const auto flags = ByteAt(data, kFlagsOffset);
 				const bool isDiscovered = (flags & kVisibleFlag) != 0;
+				// A disabled marker is absent from the map and cannot be discovered;
+				// cut locations are parked behind an initially disabled enable parent.
+				// The engine propagates the parent's state, inversion included, onto
+				// the marker's own flag, so the parent never needs reading.
+				const bool isDisabled = marker->IsDisabled();
 
 				std::string_view name;
 				if (const auto* full = static_cast<const RE::TESFullName*>(data)->GetFullName()) {
@@ -179,17 +185,19 @@ namespace FoggyMap::Recorder
 				}
 
 				out += std::format(
-					"{},0x{:08X},{},{:.2f},{:.2f},,{},{}\n",
+					"{},0x{:08X},{},{:.2f},{:.2f},,{},{},{}\n",
 					worldspaceId,
 					marker->formID,
 					Quote(name),
 					marker->data.location.x,
 					marker->data.location.y,
 					ByteAt(data, kTypeOffset),
-					isDiscovered ? 1 : 0);
+					isDiscovered ? 1 : 0,
+					isDisabled ? 1 : 0);
 
 				++total;
 				discovered += isDiscovered ? 1 : 0;
+				disabled += isDisabled ? 1 : 0;
 			}
 		}
 
@@ -228,6 +236,10 @@ namespace FoggyMap::Recorder
 		const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
 			std::chrono::steady_clock::now() - started);
 		REX::INFO(
-			"wrote {} map markers ({} discovered) in {} us", total, discovered, elapsed.count());
+			"wrote {} map markers ({} discovered, {} disabled) in {} us",
+			total,
+			discovered,
+			disabled,
+			elapsed.count());
 	}
 }
