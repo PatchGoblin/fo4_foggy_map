@@ -195,3 +195,16 @@ def test_poi_counts_come_from_the_marker_file(assets, data):
 
     assert len(fog.pois) == 2, "the other worldspace's marker is excluded"
     assert fog.pois_discovered == 1
+
+
+def test_rendering_without_rgb_skips_the_tint_but_keeps_the_fog(wide_assets, data):
+    """The Pip-Boy exporter only needs the mask; tinting the map cost it a third of a
+    second per update for an image nobody looked at."""
+    worldspace = load_worldspace(wide_assets, "Test")
+    write_path(data, [(i * 1000, 2 * CELL, 2 * CELL + i * 300.0) for i in range(30)])
+
+    full = render(worldspace, str(data))
+    mask_only = render(worldspace, str(data), with_rgb=False)
+
+    assert mask_only.rgb is None
+    np.testing.assert_array_equal(mask_only.alpha, full.alpha)

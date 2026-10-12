@@ -1,12 +1,14 @@
 """The headless exporter that keeps the in-game Pip-Boy fog current."""
 
+import inspect
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
 from PIL import Image
 
-from foggymap.exporter import export_once
+from foggymap.exporter import export_changed, export_once, watch
 from foggymap.pipboy import read_fog_file
 
 CELL = 4096
@@ -77,3 +79,59 @@ def test_export_survives_a_missing_asset(assets, data):
 
     assert any("Commonwealth" in str(p) for p in written)
     assert (data / "pipboy_Commonwealth.fog").exists()
+
+
+def _walk(data, editor_id):
+    (data / f"path_{editor_id}.csv").write_text(
+        "t_ms,x,y,z\n" + "".join(
+            f"{i * 1000},{0.5 * CELL},{0.2 * CELL + i * 150.0},0\n" for i in range(40)
+        )
+    )
+
+
+def test_export_changed_exports_everything_the_first_time(assets, data):
+    seen = {}
+
+    written = export_changed(assets, data, seen)
+
+    assert sorted(Path(p).name for p in written) == [
+        "pipboy_Commonwealth.fog",
+        "pipboy_NukaWorld.fog",
+    ]
+
+
+def test_export_changed_does_nothing_when_nothing_changed(assets, data):
+    seen = {}
+    export_changed(assets, data, seen)
+
+    assert export_changed(assets, data, seen) == []
+
+
+def test_a_new_path_sample_re_exports_only_its_own_worldspace(assets, data):
+    """Re-rendering every map on every step is what made the fog slow to catch up."""
+    seen = {}
+    export_changed(assets, data, seen)
+
+    _walk(data, "Commonwealth")
+    written = export_changed(assets, data, seen)
+
+    assert [Path(p).name for p in written] == ["pipboy_Commonwealth.fog"]
+
+
+def test_new_markers_re_export_every_worldspace(assets, data):
+    """markers.csv holds every worldspace's markers, so any of them may have changed."""
+    seen = {}
+    export_changed(assets, data, seen)
+
+    (data / "markers.csv").write_text(
+        MARKER_HEADER + "\nNukaWorld,0x00000001,\"Somewhere\",100.0,100.0,,1,1\n"
+    )
+    written = export_changed(assets, data, seen)
+
+    assert len(written) == 2
+
+
+def test_the_companion_polls_at_least_every_second():
+    """Polling is a few stat calls; a slow poll only adds latency to the in-game fog."""
+    default = inspect.signature(watch).parameters["interval"].default
+    assert default <= 1.0

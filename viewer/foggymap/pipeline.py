@@ -59,7 +59,8 @@ class Worldspace:
 class FogMap:
     """A rendered fog map plus the numbers worth putting on screen."""
 
-    rgb: np.ndarray
+    # None when rendered with ``with_rgb=False``, for callers that need only the mask.
+    rgb: np.ndarray | None
 
     # Raw fog opacity, kept because other renderers (the Pip-Boy exporter) need the
     # mask rather than the tinted image.
@@ -114,8 +115,16 @@ def load_worldspace(assets_dir, editor_id: str) -> Worldspace:
     return Worldspace(editor_id=editor_id, grid=grid, intensity=intensity)
 
 
-def render(worldspace: Worldspace, data_dir: str, settings: Settings = Settings()) -> FogMap:
-    """Build the fog map for one worldspace from the plugin's recorded data."""
+def render(
+    worldspace: Worldspace,
+    data_dir: str,
+    settings: Settings = Settings(),
+    with_rgb: bool = True,
+) -> FogMap:
+    """Build the fog map for one worldspace from the plugin's recorded data.
+
+    ``with_rgb=False`` skips tinting the map art, which only the desktop window shows.
+    """
     grid = worldspace.grid
     samples = load_samples(os.path.join(data_dir, f"path_{worldspace.editor_id}.csv"))
     pois = load_pois(os.path.join(data_dir, "markers.csv"), worldspace=worldspace.editor_id)
@@ -150,7 +159,7 @@ def render(worldspace: Worldspace, data_dir: str, settings: Settings = Settings(
     # POIs are drawn as scene markers by the viewer, not burnt into the fog: outlines
     # here gave away undiscovered locations and could not be toggled off.
     return FogMap(
-        rgb=tint_map(worldspace.intensity, alpha),
+        rgb=tint_map(worldspace.intensity, alpha) if with_rgb else None,
         alpha=alpha,
         tile_class=tile_class,
         land_tiles=land_tile_mask(worldspace.intensity, grid, settings.tile_units),

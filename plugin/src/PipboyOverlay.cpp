@@ -11,8 +11,21 @@ namespace FoggyMap::PipboyOverlay
 {
 	namespace
 	{
-		// Drawn once per opening of the Pip-Boy, not once per tick.
-		bool g_drawn{ false };
+		// Drawn once per opening of the Pip-Boy, and again only if the companion writes a
+		// newer fog file while it is still open: it may finish the export from just
+		// before you opened it a second later.
+		bool                                           g_drawn{ false };
+		std::optional<std::filesystem::file_time_type> g_drawnStamp;
+
+		// Diagnostics for the map art sometimes going missing behind the fog. Each
+		// opening's report is kept, so good and bad openings can be compared.
+		constexpr std::size_t                 kKeptOpenings{ 20 };
+		constexpr int                         kFollowUpTicks{ 3 };
+		bool                                  g_open{ false };
+		std::uint32_t                         g_opening{ 0 };
+		std::chrono::steady_clock::time_point g_openedAt{};
+		int                                   g_followUps{ 0 };
+		std::deque<std::vector<std::string>>  g_history;
 
 		// The map's own coordinate space, from TextureHolder_mc's reported dimensions.
 		constexpr double kMapExtent{ 2048.0 };
@@ -207,19 +220,119 @@ namespace FoggyMap::PipboyOverlay
 			return textureHolder;
 		}
 
+		std::optional<std::filesystem::file_time_type> StampOf(const std::filesystem::path& a_path)
+		{
+			std::error_code error;
+			const auto      stamp = std::filesystem::last_write_time(a_path, error);
+			return error ? std::nullopt : std::optional{ stamp };
+		}
+
+		std::string Describe(const Scaleform::GFx::Value& a_value)
+		{
+			if (a_value.IsString()) {
+				return a_value.GetString();
+			}
+			if (a_value.IsNumber()) {
+				return std::format("{:.1f}", a_value.GetNumber());
+			}
+			if (a_value.IsInt()) {
+				return std::to_string(a_value.GetInt());
+			}
+			if (a_value.IsUInt()) {
+				return std::to_string(a_value.GetUInt());
+			}
+			if (a_value.IsBoolean()) {
+				return a_value.GetBoolean() ? "true" : "false";
+			}
+			if (a_value.IsObject()) {
+				return "object";
+			}
+			return a_value.IsUndefined() ? "undefined" : "?";
+		}
+
+		std::string MemberOf(Scaleform::GFx::Value& a_object, const char* a_name)
+		{
+			Scaleform::GFx::Value member;
+			return a_object.GetMember(a_name, std::addressof(member)) ? Describe(member) : "-";
+		}
+
+		// What the texture holder contains, so a missing map image can be told apart from
+		// one that is present but hidden, or one that arrives after the fog.
+		void ListChildren(
+			Scaleform::GFx::Value&    a_holder,
+			std::string_view          a_label,
+			std::vector<std::string>& a_report)
+		{
+			Scaleform::GFx::Value count;
+			if (!a_holder.GetMember("numChildren", std::addressof(count))) {
+				a_report.emplace_back(std::format("{}: numChildren unavailable", a_label));
+				return;
+			}
+			// Scaleform reports numChildren as kInt, not kNumber.
+			const auto children = count.IsInt()    ? count.GetInt() :
+			                      count.IsNumber() ? static_cast<std::int32_t>(count.GetNumber()) :
+			                                         -1;
+			a_report.emplace_back(std::format("{}: {} children", a_label, children));
+
+			for (std::int32_t index = 0; index < std::min(children, 32); ++index) {
+				Scaleform::GFx::Value argument[1];
+				argument[0] = index;
+				Scaleform::GFx::Value child;
+				if (!a_holder.Invoke("getChildAt", std::addressof(child), argument, 1) ||
+					!child.IsObject()) {
+					a_report.emplace_back(std::format("  [{}] unreadable", index));
+					continue;
+				}
+				Scaleform::GFx::Value text;
+				child.Invoke("toString", std::addressof(text), nullptr, 0);
+				a_report.emplace_back(std::format(
+					"  [{}] {} name={} size={}x{} visible={} alpha={}",
+					index,
+					Describe(text),
+					MemberOf(child, "name"),
+					MemberOf(child, "width"),
+					MemberOf(child, "height"),
+					MemberOf(child, "visible"),
+					MemberOf(child, "alpha")));
+			}
+		}
+
+		// Adds this tick's lines to the current opening and rewrites the report, which
+		// holds the last few openings. Lines carry the time since the Pip-Boy opened.
 		void WriteReport(const std::vector<std::string>& a_report)
 		{
+			if (g_history.empty()) {
+				g_history.emplace_back();
+			}
+			const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - g_openedAt);
+			for (const auto& line : a_report) {
+				g_history.back().push_back(std::format("+{:>5} ms  {}", elapsed.count(), line));
+				REX::INFO("overlay: {}", line);
+			}
+
 			const auto&     config = Config::Get();
 			std::error_code error;
 			std::filesystem::create_directories(config.outputDir, error);
 
 			std::ofstream out{ config.outputDir / "pipboy_overlay.txt", std::ios::trunc };
-			for (const auto& line : a_report) {
-				if (out) {
+			for (const auto& opening : g_history) {
+				for (const auto& line : opening) {
 					out << line << '\n';
 				}
-				REX::INFO("overlay: {}", line);
+				out << '\n';
 			}
+		}
+
+		void BeginOpening()
+		{
+			g_open = true;
+			g_openedAt = std::chrono::steady_clock::now();
+			g_history.emplace_back();
+			while (g_history.size() > kKeptOpenings) {
+				g_history.pop_front();
+			}
+			WriteReport({ std::format("=== opening {} ===", ++g_opening) });
 		}
 	}
 
@@ -235,11 +348,14 @@ namespace FoggyMap::PipboyOverlay
 		}
 		const auto menu = ui->GetMenu<RE::PipboyMenu>();
 		if (!menu) {
-			g_drawn = false;  // Pip-Boy closed; draw again next time it opens
+			// Pip-Boy closed; draw again next time it opens
+			g_open = false;
+			g_drawn = false;
+			g_followUps = 0;
 			return;
 		}
-		if (g_drawn) {
-			return;
+		if (!g_open) {
+			BeginOpening();
 		}
 
 		auto textureHolder = FindTextureHolder(*menu);
@@ -251,14 +367,30 @@ namespace FoggyMap::PipboyOverlay
 			return;
 		}
 
+		const auto worldspace = WorldspaceForFog();
+		const auto fogPath = Config::Get().outputDir / std::format("pipboy_{}.fog", worldspace);
+		const auto stamp = StampOf(fogPath);
+
+		if (g_drawn && stamp == g_drawnStamp) {
+			if (g_followUps > 0) {
+				--g_followUps;
+				std::vector<std::string> report;
+				ListChildren(textureHolder, "later", report);
+				WriteReport(report);
+			}
+			return;
+		}
+
 		// From here on, a failure is structural rather than a matter of timing, so it is
-		// recorded and not retried every second.
+		// recorded and not retried until the fog file changes.
 		g_drawn = true;
+		g_drawnStamp = stamp;
+		g_followUps = kFollowUpTicks;
+		const auto started = std::chrono::steady_clock::now();
 
 		std::vector<std::string> report;
-		const auto worldspace = WorldspaceForFog();
-		const auto fog = ReadFogFile(
-			Config::Get().outputDir / std::format("pipboy_{}.fog", worldspace));
+		ListChildren(textureHolder, "before draw", report);
+		const auto fog = ReadFogFile(fogPath);
 		if (!fog.Valid()) {
 			report.emplace_back(std::format("no usable fog file for {} yet", worldspace));
 			WriteReport(report);
@@ -274,6 +406,12 @@ namespace FoggyMap::PipboyOverlay
 
 		report.emplace_back(std::format("worldspace = {}", worldspace));
 		DrawRectangles(*movie, textureHolder, grid, report);
+		ListChildren(textureHolder, "after draw", report);
+		report.emplace_back(std::format(
+			"draw took {} ms",
+			std::chrono::duration_cast<std::chrono::milliseconds>(
+				std::chrono::steady_clock::now() - started)
+				.count()));
 		WriteReport(report);
 	}
 }

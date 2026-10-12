@@ -2,12 +2,14 @@
 
 import numpy as np
 import pytest
+from scipy import ndimage
 
 from foggymap.config import area_fog_radius_units
 from foggymap.coverage import (
     PARTIAL,
     SWEPT,
     UNVISITED,
+    _disc,
     classify_tiles,
     coverage_mask,
     land_tile_mask,
@@ -156,3 +158,70 @@ def test_unvisited_ground_stays_hidden():
 
     far_col, far_row = SYNTHETIC.to_px(9.5 * CELL, 5 * CELL)
     assert not revealed[int(far_row), int(far_col)]
+
+
+def _random_walk(seed, count=400):
+    """A wandering path with fast-travel jumps, some of it beyond the map edge."""
+    rng = np.random.default_rng(seed)
+    position = np.array([5 * CELL, 5 * CELL])
+    samples = []
+    for index in range(count):
+        if rng.random() < 0.02:
+            position = rng.uniform(-CELL, 11 * CELL, size=2)
+        else:
+            position = position + rng.normal(0, 600, size=2)
+        samples.append(Sample(index * 1000, float(position[0]), float(position[1]), 0.0))
+    return samples
+
+
+def _rasterize_reference(grid, samples, segments):
+    """The original point-by-point rasterizer, kept as the oracle for the fast one."""
+    raster = np.zeros((grid.height_px, grid.width_px), dtype=bool)
+
+    def mark(col, row):
+        col, row = int(col), int(row)
+        if 0 <= row < raster.shape[0] and 0 <= col < raster.shape[1]:
+            raster[row, col] = True
+
+    for sample in samples:
+        mark(*grid.to_px(sample.x, sample.y))
+    for start, end in segments:
+        col0, row0 = grid.to_px(start.x, start.y)
+        col1, row1 = grid.to_px(end.x, end.y)
+        steps = int(max(abs(col1 - col0), abs(row1 - row0))) + 1
+        for col, row in zip(np.linspace(col0, col1, steps + 1), np.linspace(row0, row1, steps + 1)):
+            mark(col, row)
+    return raster
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_rasterize_marks_exactly_the_pixels_of_the_point_by_point_walk(seed):
+    samples = _random_walk(seed)
+    segments = build_segments(samples)
+
+    np.testing.assert_array_equal(
+        rasterize_path(SYNTHETIC, samples, segments),
+        _rasterize_reference(SYNTHETIC, samples, segments),
+    )
+
+
+def test_rasterize_handles_no_samples():
+    assert not rasterize_path(SYNTHETIC, [], []).any()
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_closing_matches_closing_the_whole_image(seed):
+    """Closing is confined to the explored area for speed; it must not change the result,
+    including where the explored area meets the map edge."""
+    samples = _random_walk(seed)
+    raster = rasterize_path(SYNTHETIC, samples, build_segments(samples))
+    radius, close = 1500.0, CELL / 4
+
+    distance = ndimage.distance_transform_edt(
+        ~raster, sampling=(SYNTHETIC.units_per_px_y, SYNTHETIC.units_per_px_x)
+    )
+    expected = ndimage.binary_closing(distance <= radius, _disc(SYNTHETIC, close))
+
+    np.testing.assert_array_equal(
+        coverage_mask(raster, SYNTHETIC, radius_units=radius, close_units=close), expected
+    )

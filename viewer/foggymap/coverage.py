@@ -27,36 +27,49 @@ def rasterize_path(
 
     Samples are marked individually so a fast travel arrival still earns credit for
     where it landed, even though no segment leads to it.
+
+    Every point is generated in one numpy pass: a Python loop per segment cost most of
+    a second on a long playthrough, which delayed every in-game fog update.
     """
     raster = np.zeros((grid.height_px, grid.width_px), dtype=bool)
 
-    for sample in samples:
-        _mark(raster, grid, sample.x, sample.y)
+    points = [_px(grid, samples)]
+    if segments:
+        points.append(_segment_points(
+            _px(grid, [start for start, _ in segments]),
+            _px(grid, [end for _, end in segments]),
+        ))
+    cols, rows = np.concatenate(points, axis=1).astype(int)
 
-    for start, end in segments:
-        _mark_line(raster, grid, start, end)
-
+    inside = (rows >= 0) & (rows < raster.shape[0]) & (cols >= 0) & (cols < raster.shape[1])
+    raster[rows[inside], cols[inside]] = True
     return raster
 
 
-def _mark(raster: np.ndarray, grid: Grid, x: float, y: float) -> None:
-    col, row = grid.to_px(x, y)
-    col, row = int(col), int(row)
-    if 0 <= row < raster.shape[0] and 0 <= col < raster.shape[1]:
-        raster[row, col] = True
+def _px(grid: Grid, samples: list[Sample]) -> np.ndarray:
+    """Fractional (column, row) for each sample, as a 2xN array."""
+    x = np.array([sample.x for sample in samples], dtype=float)
+    y = np.array([sample.y for sample in samples], dtype=float)
+    return np.array(grid.to_px(x, y)).reshape(2, -1)
 
 
-def _mark_line(raster: np.ndarray, grid: Grid, start: Sample, end: Sample) -> None:
-    """Mark the pixels along a straight walk, sampled densely enough to leave no gaps."""
-    col0, row0 = grid.to_px(start.x, start.y)
-    col1, row1 = grid.to_px(end.x, end.y)
-    steps = int(max(abs(col1 - col0), abs(row1 - row0))) + 1
-    for col, row in zip(
-        np.linspace(col0, col1, steps + 1), np.linspace(row0, row1, steps + 1)
-    ):
-        col, row = int(col), int(row)
-        if 0 <= row < raster.shape[0] and 0 <= col < raster.shape[1]:
-            raster[row, col] = True
+def _segment_points(start: np.ndarray, end: np.ndarray) -> np.ndarray:
+    """Points along each segment, dense enough to leave no gaps.
+
+    Reproduces ``np.linspace`` exactly -- start plus index times step, with the end
+    point set exactly -- so a pixel on a boundary lands the same way it always has.
+    """
+    delta = end - start
+    steps = np.floor(np.abs(delta).max(axis=0)).astype(int) + 1
+    counts = steps + 1
+
+    segment = np.repeat(np.arange(steps.size), counts)
+    index = np.arange(counts.sum()) - np.repeat(np.cumsum(counts) - counts, counts)
+    points = start[:, segment] + index * (delta / steps)[:, segment]
+
+    last = np.cumsum(counts) - 1
+    points[:, last] = end
+    return points
 
 
 def coverage_mask(
@@ -80,8 +93,29 @@ def coverage_mask(
     revealed = distance <= radius_units
 
     if close_units > 0:
-        revealed = ndimage.binary_closing(revealed, _disc(grid, close_units))
+        revealed = _close_within_bounds(revealed, _disc(grid, close_units))
     return revealed
+
+
+def _close_within_bounds(mask: np.ndarray, structure: np.ndarray) -> np.ndarray:
+    """``binary_closing`` restricted to the revealed area's bounding box.
+
+    Closing the whole map took over a second while most of it is unexplored. Padding
+    the box by twice the structure leaves room for the dilation to grow and keeps the
+    erosion's view of the edge all False, matching scipy's default border, so the
+    result is identical to closing the whole image.
+    """
+    rows = np.flatnonzero(mask.any(axis=1))
+    cols = np.flatnonzero(mask.any(axis=0))
+    pad_y, pad_x = structure.shape
+    top, bottom = max(rows[0] - pad_y, 0), min(rows[-1] + pad_y + 1, mask.shape[0])
+    left, right = max(cols[0] - pad_x, 0), min(cols[-1] + pad_x + 1, mask.shape[1])
+
+    closed = np.zeros_like(mask)
+    closed[top:bottom, left:right] = ndimage.binary_closing(
+        mask[top:bottom, left:right], structure
+    )
+    return closed
 
 
 def tile_counts(grid: Grid, tile_units: float) -> tuple[int, int]:
