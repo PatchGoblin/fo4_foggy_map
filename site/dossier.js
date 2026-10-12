@@ -5,7 +5,8 @@
 
 (function () {
   const root = document.getElementById("dossier");
-  const contents = document.getElementById("contents");
+  const tabBar = document.getElementById("tabs");
+  const tabs = [];  // { id, title, badge }, in order
 
   // Builds an element. Text always goes in as text, never as markup.
   function el(tag, attrs = {}, ...children) {
@@ -44,9 +45,12 @@
     return response.json();
   }
 
-  function section(id, title, ...body) {
-    contents.append(el("a", { href: `#${id}` }, title));
-    return el("section", { id, class: `part part-${id}` }, el("h2", {}, title), body);
+  // A section is a tab's panel. The badge is a small count on the tab itself, a hint
+  // of what is behind it.
+  function section(id, title, badge, ...body) {
+    tabs.push({ id, title, badge });
+    return el("section", { id: `panel-${id}`, class: `part part-${id}`, role: "tabpanel",
+      "aria-labelledby": `tab-${id}`, hidden: true }, el("h2", {}, title), body);
   }
 
   // --- character -------------------------------------------------------------------
@@ -84,7 +88,7 @@
       ["Travelling with", (p.companions || []).join(" and ") || "Nobody"],
     ].filter(([, value]) => value !== null && value !== undefined && value !== "");
 
-    return section("character", "Character",
+    return section("character", "Character", `Level ${p.level}`,
       el("div", { class: "who" },
         el("p", { class: "name" }, p.name),
         el("p", { class: "level" }, el("span", { class: "figure" }, String(p.level)), " level"),
@@ -118,7 +122,9 @@
       el("h3", {}, `Bobbleheads, ${p.bobbleheads.length} of 20`),
       el("ul", { class: "inline" }, p.bobbleheads.map((b) => el("li", {}, b)))) : null;
     if (!groups.length && !magazines && !bobbleheads) return null;
-    return section("perks", "Perks", el("div", { class: "trees" }, groups, magazines, bobbleheads));
+    const perkCount = (p.perks || []).reduce((sum, group) => sum + group.perks.length, 0);
+    return section("perks", "Perks", perkCount ? String(perkCount) : null,
+      el("div", { class: "trees" }, groups, magazines, bobbleheads));
   }
 
   // --- quests ----------------------------------------------------------------------
@@ -140,7 +146,7 @@
       el("ul", { class: "finished" }, list.map((quest) => el("li", { class: quest.failed ? "failed" : "" },
         quest.name, quest.failed ? el("span", { class: "tag" }, "Failed") : null)))));
 
-    return section("quests", "Quests",
+    return section("quests", "Quests", `${q.active.length} active`,
       el("h3", {}, `In progress, ${q.active.length}`), active,
       el("h3", {}, `Finished, ${q.finished.length}`), finished);
   }
@@ -175,7 +181,8 @@
         if (needle && shown) block.open = true;
       }
     });
-    return section("inventory", "Inventory", filter, blocks);
+    const lines = categories.reduce((sum, category) => sum + category.items.length, 0);
+    return section("inventory", "Inventory", number(lines), filter, blocks);
   }
 
   // --- timeline --------------------------------------------------------------------
@@ -197,7 +204,7 @@
           new Date(event.at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }),
           event.game_date ? `in game ${event.game_date}` : null,
         ].filter(Boolean).join(", ")))))));
-    return section("timeline", "Timeline", el("ol", { class: "days" }, list));
+    return section("timeline", "Timeline", String(events.length), el("ol", { class: "days" }, list));
   }
 
   // --- mods ------------------------------------------------------------------------
@@ -219,7 +226,7 @@
       el("ul", { class: "load-order" }, m.f4se.map((dll) => el("li", {}, el("span", {}, dll))))) : null;
 
     if (!m.mo2) {
-      return section("mods", "Mods", el("p", { class: "lede" }, `${total} plugins, in load order.`), blocks, f4se);
+      return section("mods", "Mods", String(total), el("p", { class: "lede" }, `${total} plugins, in load order.`), blocks, f4se);
     }
     // Every enabled mod as Mod Organizer lists it, grouped by the player's separators,
     // with the plugins and DLLs each one brings. The load order follows for detail.
@@ -233,7 +240,7 @@
     const unmanaged = (m.mo2.unmanaged || []).length ? el("details", {},
       el("summary", {}, "DLC and Creation Club", el("span", { class: "count" }, String(m.mo2.unmanaged.length))),
       el("ul", { class: "mod-list" }, m.mo2.unmanaged.map((name) => el("li", {}, el("span", {}, name))))) : null;
-    return section("mods", "Mods",
+    return section("mods", "Mods", String(m.mo2.enabled),
       el("p", { class: "lede" }, `${m.mo2.enabled} mods enabled in Mod Organizer, ${total} plugins in load order.`),
       mo2, unmanaged,
       el("h3", {}, "Load order"), blocks, f4se);
@@ -254,9 +261,66 @@
     }
     const parts = [character(player), perks(player), quests(player), inventory(player),
       timeline(events), mods(player)].filter(Boolean);
+    if (!parts.length) return;
     root.append(...parts);
     root.hidden = false;
-    contents.hidden = false;
+    makeTabs();
+  }
+
+  // --- tabs ------------------------------------------------------------------------
+
+  // The map is the first tab and the default; each section is another. The address
+  // follows the tab (#quests), so a tab can be linked to and the back button works.
+  function makeTabs() {
+    for (const { id, title, badge } of tabs) {
+      const button = el("button", { type: "button", role: "tab", id: `tab-${id}`,
+        "aria-controls": `panel-${id}`, "aria-selected": "false", tabindex: "-1" },
+        title, badge ? el("span", { class: "badge" }, badge) : null);
+      button.addEventListener("click", () => select(id, true));
+      tabBar.append(button);
+    }
+    document.getElementById("tab-map").addEventListener("click", () => select("map", true));
+    tabBar.addEventListener("keydown", moveFocus);
+    window.addEventListener("popstate", () => select(fromAddress(), false));
+    tabBar.hidden = false;
+    select(fromAddress(), false);
+  }
+
+  function ids() {
+    return ["map", ...tabs.map((tab) => tab.id)];
+  }
+
+  function fromAddress() {
+    const id = decodeURIComponent(location.hash.slice(1));
+    return ids().includes(id) ? id : "map";
+  }
+
+  function select(id, remember) {
+    for (const key of ids()) {
+      const on = key === id;
+      document.getElementById(`panel-${key}`).hidden = !on;
+      const tab = document.getElementById(`tab-${key}`);
+      tab.setAttribute("aria-selected", String(on));
+      tab.tabIndex = on ? 0 : -1;
+    }
+    if (remember) {
+      const address = id === "map" ? location.pathname + location.search : `#${id}`;
+      if (address !== location.hash) history.pushState(null, "", address);
+      tabBar.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  // Arrow keys move between tabs, as tab lists do everywhere else.
+  function moveFocus(event) {
+    const order = ids();
+    const current = order.indexOf(document.activeElement.id.replace(/^tab-/, ""));
+    if (current < 0) return;
+    const next = { ArrowRight: current + 1, ArrowLeft: current - 1, Home: 0, End: order.length - 1 }[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    const id = order[(next + order.length) % order.length];
+    select(id, true);
+    document.getElementById(`tab-${id}`).focus();
   }
 
   start();

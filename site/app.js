@@ -266,6 +266,8 @@ function zoomAt(factor, x, y) {
 function resize() {
   if (!view) return;
   const size = canvas.clientWidth;
+  // Zero while the map's tab is hidden; it is resized again when the tab returns.
+  if (size === 0) return;
   const ratio = window.devicePixelRatio || 1;
   canvas.width = Math.round(size * ratio);
   canvas.height = Math.round(size * ratio);

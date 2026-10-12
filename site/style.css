@@ -13,6 +13,9 @@
 
 * { box-sizing: border-box; }
 
+/* Panels set their own display, which would otherwise win over the hidden attribute. */
+[hidden] { display: none !important; }
+
 html { background: var(--water-deep); }
 
 body {
@@ -159,29 +162,52 @@ footer a { color: var(--bone); }
   h1 { font-size: 2.5rem; }
 }
 
-/* --- the playthrough, below the map ---------------------------------------------- */
+/* --- tabs: the map first, then the playthrough ------------------------------------- */
 
-.contents { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin: 0 0 1.5rem; }
-.contents a { color: var(--bone); font: 500 1.0625rem/1.6 var(--display); text-decoration-color: var(--rule); text-underline-offset: 0.25em; }
-.contents a:hover { text-decoration-color: var(--trail); }
+.tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  gap: 0.25rem;
+  max-width: 82rem;
+  margin: 0 auto;
+  padding: 0.75rem 1.5rem 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--water-deep);
+  border-bottom: 1px solid var(--rule);
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs [role="tab"] {
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  min-width: 0;
+  padding: 0.55rem 0.9rem 0.65rem;
+  background: transparent;
+  color: var(--mist);
+  border: 0;
+  border-bottom: 3px solid transparent;
+  font: 700 1.25rem/1 var(--display);
+  cursor: pointer;
+}
+.tabs [role="tab"]:hover { color: var(--bone); }
+.tabs [role="tab"][aria-selected="true"] { color: var(--bone); border-bottom-color: var(--trail); }
+.tabs .badge { color: var(--trail); font: 500 0.875rem/1 var(--text); font-variant-numeric: tabular-nums; }
 
 .dossier {
   max-width: 82rem;
   margin: 0 auto;
-  padding: 0 1.5rem 4rem;
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 3rem 2rem;
+  padding: 2rem 1.5rem 4rem;
 }
 
-.part { grid-column: span 6; min-width: 0; }
-.part-character, .part-perks { grid-column: span 12; }
-.part h2 {
-  margin: 0 0 1rem;
-  padding-top: 0.75rem;
-  border-top: 2px solid var(--trail);
-  font: 700 2.25rem/1 var(--display);
-}
+.part { min-width: 0; }
+/* Lists read best in a column, not across the whole page; the character sheet and
+   the perk chart are laid out wide on purpose. */
+.part-quests, .part-inventory, .part-timeline, .part-mods { max-width: 48rem; }
+.part h2 { margin: 0 0 1rem; font: 700 2.25rem/1 var(--display); }
 .part h3 { margin: 1.25rem 0 0.5rem; font: 500 1.25rem/1.2 var(--display); color: var(--bone); }
 .tag {
   margin-left: 0.6rem;
@@ -274,14 +300,14 @@ summary:focus-visible { outline: 2px solid var(--trail); outline-offset: 2px; }
 .slot { flex-shrink: 0; width: 3.5rem; color: var(--mist); font-variant-numeric: tabular-nums; }
 
 @media (max-width: 64rem) {
-  /* Twelve columns' worth of gaps cannot fit a phone: one column instead. */
-  .dossier { grid-template-columns: minmax(0, 1fr); }
-  .part, .part-character, .part-perks { grid-column: 1 / -1; }
   .part-character { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 52rem) {
-  .dossier { padding: 0 1rem 3rem; gap: 2.5rem; }
+  .dossier { padding: 1.5rem 1rem 3rem; }
+  /* The tabs scroll sideways here; fading the right edge says there are more. */
+  .tabs { padding: 0.5rem 0.5rem 0; mask-image: linear-gradient(to right, #000 85%, transparent); }
+  .tabs [role="tab"] { padding: 0.5rem 0.65rem 0.6rem; font-size: 1.125rem; }
   .special li { grid-template-columns: 1.5rem minmax(0, 1fr) 4.5rem; }
   .special .label { display: none; }
 }

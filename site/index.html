@@ -12,7 +12,10 @@
 <link rel="icon" href="data:,">
 </head>
 <body>
-<main class="survey">
+<nav class="tabs" id="tabs" role="tablist" aria-label="Playthrough" hidden>
+  <button type="button" role="tab" id="tab-map" aria-controls="panel-map" aria-selected="true">Map</button>
+</nav>
+<main class="survey" id="panel-map" role="tabpanel" aria-labelledby="tab-map">
   <figure class="chart">
     <canvas id="map" aria-label="Map of explored ground and the path walked. Scroll or pinch to zoom, drag to move, tap a location for its name."></canvas>
     <div id="tip" class="tip" hidden></div>
@@ -59,8 +62,6 @@
       <li><span class="swatch fog"></span>Unexplored</li>
       <li><span class="swatch mark"></span>Discovered location (hover or tap for its name)</li>
     </ul>
-
-    <nav class="contents" id="contents" aria-label="Playthrough" hidden></nav>
 
     <footer>Recorded in-game by <a href="https://github.com/PatchGoblin/fo4_foggy_map">FoggyMap</a>, a Fallout 4 mod. The map is drawn from the game's terrain. Locations not yet discovered stay hidden. Icons by <a href="https://lucide.dev">Lucide</a>.</footer>
   </section>
