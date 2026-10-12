@@ -57,10 +57,12 @@ def _export(assets_dir, data_dir, editor_ids, settings: Settings | None) -> list
     return written
 
 
-def watch(assets_dir, data_dir, interval: float = 1.0) -> None:
+def watch(assets_dir, data_dir, interval: float = 1.0, on_tick=None, sleep=time.sleep) -> None:
     """Export whenever the plugin writes new data. Runs until killed.
 
     Re-exports only on a fingerprint change, so standing still costs nothing.
+    ``on_tick`` runs after each pass, once the fog files are current -- it is how
+    publishing rides along without a thread of its own.
     """
     print(f"watching {data_dir} every {interval:g}s", flush=True)
     seen: dict[str, tuple] = {}
@@ -69,4 +71,6 @@ def watch(assets_dir, data_dir, interval: float = 1.0) -> None:
         written = export_changed(assets_dir, data_dir, seen)
         if written:
             print(f"exported {len(written)} fog files", flush=True)
-        time.sleep(interval)
+        if on_tick is not None:
+            on_tick()
+        sleep(interval)

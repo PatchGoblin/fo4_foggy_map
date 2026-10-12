@@ -1,0 +1,11 @@
+# The site is plain files with nothing to build: Amplify serves the repository as-is.
+version: 1
+frontend:
+  phases:
+    build:
+      commands:
+        - echo "static site, nothing to build"
+  artifacts:
+    baseDirectory: /
+    files:
+      - '**/*'

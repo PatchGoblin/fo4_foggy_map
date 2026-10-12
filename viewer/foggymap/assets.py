@@ -1,7 +1,8 @@
 """Building the base map images and worldspace manifest from installed game files.
 
 Runs on the player's machine, on the companion's first launch: the images are
-Bethesda's, so they can be extracted but never shipped.
+Bethesda's, so they can be extracted but never shipped. Alongside each it renders a
+relief map of our own from the terrain, which is what the published site shows.
 """
 
 from __future__ import annotations
@@ -14,8 +15,10 @@ from dataclasses import dataclass
 from PIL import Image
 
 from foggymap.ba2 import extract_texture
-from foggymap.fo4_esm import read_worldspace_map_data
+from foggymap.config import CELL_UNITS
+from foggymap.fo4_esm import SAMPLES_PER_CELL, read_terrain, read_worldspace_map_data
 from foggymap.pipeline import MANIFEST_NAME
+from foggymap.relief import render_relief
 
 
 @dataclass(frozen=True)
@@ -69,6 +72,21 @@ def _base_intensity(image: Image.Image) -> Image.Image:
     return luminance
 
 
+def _relief(esm_path: str, map_data) -> Image.Image | None:
+    """Our own relief map of the worldspace, or None if its terrain cannot be read.
+
+    Only the published site uses it, so a failure here must never cost the fog.
+    """
+    try:
+        terrain = read_terrain(esm_path, map_data)
+    except Exception as error:  # noqa: BLE001 - reported; the fog does not need it
+        print(f"no relief map for {map_data.editor_id}: {type(error).__name__}: {error}",
+              flush=True)
+        return None
+    pixels = render_relief(terrain.heights, terrain.water, CELL_UNITS / SAMPLES_PER_CELL)
+    return Image.fromarray(pixels, mode="RGB")
+
+
 def build_assets(data_dir: str, out_dir, sources=MAP_SOURCES) -> dict:
     """Extract each available map image to ``out_dir`` and return (and write) the manifest.
 
@@ -94,7 +112,8 @@ def build_assets(data_dir: str, out_dir, sources=MAP_SOURCES) -> dict:
             raise KeyError(f"{source.editor_id} has no map data in {source.esm}")
         dds = extract_texture(archive, source.texture)
         image = _base_intensity(Image.open(io.BytesIO(dds)))
-        loaded.append((source, bounds[source.editor_id], image))
+        relief = _relief(esm, bounds[source.editor_id])
+        loaded.append((source, bounds[source.editor_id], image, relief))
 
     if not loaded:
         raise AssetsUnavailable(
@@ -103,9 +122,13 @@ def build_assets(data_dir: str, out_dir, sources=MAP_SOURCES) -> dict:
 
     os.makedirs(out_dir, exist_ok=True)
     manifest: dict[str, dict] = {}
-    for source, map_data, image in loaded:
+    for source, map_data, image, relief in loaded:
         image_name = f"worldmap_{source.editor_id}.png"
         image.save(os.path.join(out_dir, image_name), optimize=True)
+        relief_name = None
+        if relief is not None:
+            relief_name = f"relief_{source.editor_id}.png"
+            relief.save(os.path.join(out_dir, relief_name), optimize=True)
         manifest[source.editor_id] = {
             "editor_id": source.editor_id,
             "form_id": f"0x{map_data.form_id:08X}",
@@ -114,6 +137,9 @@ def build_assets(data_dir: str, out_dir, sources=MAP_SOURCES) -> dict:
             "width_px": image.width,
             "height_px": image.height,
             "image": image_name,
+            # None when the terrain could not be read; present either way, so the
+            # companion can tell a failed relief from assets built before reliefs.
+            "relief": relief_name,
         }
 
     # Written aside and renamed into place, so the manifest never exists half-written.

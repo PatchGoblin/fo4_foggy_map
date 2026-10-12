@@ -85,3 +85,17 @@ def test_manifest_is_written_to_disk_as_json(built):
     on_disk = json.loads((out / "worldspaces.json").read_text())
 
     assert "Commonwealth" in on_disk
+
+
+@needs_game
+@pytest.mark.parametrize("editor_id", ["Commonwealth", "DLC03FarHarbor", "NukaWorld"])
+def test_every_worldspace_gets_a_relief_with_land_and_water(built, editor_id):
+    manifest, out = built
+    entry = manifest[editor_id]
+
+    relief = numpy.array(Image.open(out / entry["relief"])).astype(int)
+
+    cells = entry["se_cell"][0] - entry["nw_cell"][0] + 1
+    assert relief.shape[1] == cells * 32 + 1
+    blueish = relief[..., 2] > relief[..., 0]
+    assert 0.01 < blueish.mean() < 0.95, "both land and water are drawn"

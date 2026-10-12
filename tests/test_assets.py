@@ -13,7 +13,7 @@ from PIL import Image
 
 from foggymap import assets
 from foggymap.assets import AssetsUnavailable, MapSource, build_assets
-from foggymap.fo4_esm import WorldspaceMapData
+from foggymap.fo4_esm import Terrain, WorldspaceMapData
 
 SOURCES = (
     MapSource("Commonwealth", "Fallout4.esm", "Fallout4 - Textures6.ba2", "cw.dds"),
@@ -45,8 +45,16 @@ def fake_readers(monkeypatch):
             raise ValueError(f"corrupt {texture}")
         return _png_bytes()
 
+    def read_terrain(esm_path, map_data):
+        if map_data.editor_id in failing:
+            raise ValueError(f"unreadable terrain for {map_data.editor_id}")
+        heights = np.zeros((65, 97), dtype=np.float32)
+        heights[:, 48:] = 1000.0
+        return Terrain(heights=heights, water=np.full_like(heights, 500.0))
+
     monkeypatch.setattr(assets, "read_worldspace_map_data", read_map_data)
     monkeypatch.setattr(assets, "extract_texture", extract)
+    monkeypatch.setattr(assets, "read_terrain", read_terrain)
     return failing
 
 
@@ -130,3 +138,33 @@ def test_a_failed_manifest_write_leaves_no_manifest(tmp_path, fake_readers, monk
         build_assets(str(game), out, SOURCES)
 
     assert not (out / "worldspaces.json").exists()
+
+
+def test_renders_a_relief_map_from_the_terrain(tmp_path, fake_readers):
+    game = tmp_path / "Data"
+    _install(game, "Fallout4.esm", "Fallout4 - Textures6.ba2")
+    out = tmp_path / "assets"
+
+    manifest = build_assets(str(game), out, SOURCES)
+
+    assert manifest["Commonwealth"]["relief"] == "relief_Commonwealth.png"
+    relief = Image.open(out / "relief_Commonwealth.png")
+    assert relief.mode == "RGB"
+    assert relief.size == (97, 65)
+    pixels = np.array(relief).astype(int)
+    assert pixels[30, 10, 2] > pixels[30, 10, 0], "west half is under water"
+    assert pixels[30, 80, 1] > pixels[30, 80, 2], "east half is land"
+
+
+def test_unreadable_terrain_costs_only_the_relief(tmp_path, fake_readers, capsys):
+    """The relief is for the website; it must never stop the in-game fog."""
+    game = tmp_path / "Data"
+    _install(game, "Fallout4.esm", "Fallout4 - Textures6.ba2")
+    fake_readers.add("Commonwealth")
+    out = tmp_path / "assets"
+
+    manifest = build_assets(str(game), out, SOURCES)
+
+    assert manifest["Commonwealth"]["relief"] is None
+    assert (out / "worldmap_Commonwealth.png").exists()
+    assert "unreadable terrain" in capsys.readouterr().out

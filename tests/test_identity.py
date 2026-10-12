@@ -1,6 +1,10 @@
 """The release must not carry anything that identifies the maintainer."""
 
-from identity_scan import default_terms, find_leaks
+import subprocess
+import sys
+from pathlib import Path
+
+from foggymap.identity import default_terms, find_leaks
 
 TERM = "SomeoneSpecific"
 
@@ -43,3 +47,15 @@ def test_other_peoples_users_paths_are_not_leaks(monkeypatch, tmp_path):
     (tmp_path / "scipy.pyd").write_bytes(b"C:\\Users\\runneradmin\\build /Users/runner/x")
 
     assert find_leaks(str(tmp_path), default_terms()) == []
+
+
+def test_the_release_tool_still_runs_from_anywhere(tmp_path):
+    """package_release.ps1 runs it as a script, without the test path setup."""
+    (tmp_path / "a.txt").write_text("nothing to see")
+    tool = Path(__file__).parent.parent / "tools" / "identity_scan.py"
+
+    result = subprocess.run([sys.executable, str(tool), str(tmp_path)],
+                            capture_output=True, text=True, cwd=tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "identity scan clean: 1 files" in result.stdout

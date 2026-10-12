@@ -24,7 +24,10 @@ namespace FoggyMap::Companion
 					return HANDLE{ nullptr };
 				}
 				JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
-				limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+				// Breakaway lets the companion start its exit publisher outside the job, so
+				// that one process survives the game long enough to publish progress.
+				limits.BasicLimitInformation.LimitFlags =
+					JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
 				if (!SetInformationJobObject(
 						created, JobObjectExtendedLimitInformation, &limits, sizeof(limits))) {
 					REX::WARN("could not configure the companion job (error {})", GetLastError());
@@ -136,7 +139,8 @@ namespace FoggyMap::Companion
 			command = Quoted(bundled);
 		}
 		std::wstring commandLine = command + L" --data " + Quoted(config.outputDir) +
-		                           L" --game-data " + Quoted(GameDataDirectory());
+		                           L" --game-data " + Quoted(GameDataDirectory()) +
+		                           L" --game-pid " + std::to_wstring(GetCurrentProcessId());
 		REX::INFO("companion command: {}", PathText(commandLine));
 		// CreateProcessW may modify the command line buffer, so the copy above is ours.
 		commandLine.push_back(L'\0');

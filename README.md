@@ -158,13 +158,73 @@ For a still image instead of a window:
 | `MinMoveUnits` | 256 | ignore samples closer than this to the last one (70 units = 1 m) |
 | `ForceSampleSeconds` | 30 | record anyway after this long, so idle time still shows |
 | `AutoLaunchCompanion` | 1 | start the companion with the game; the game's exit ends it |
-| `CompanionCommand` | — | run a different companion (e.g. a repo checkout); `--data` and `--game-data` are appended. Output goes to `companion.log` |
+| `CompanionCommand` | — | run a different companion (e.g. a repo checkout); `--data`, `--game-data` and `--game-pid` are appended. Output goes to `companion.log` |
 | `PipboyOverlay` | 1 | draw the fog on the in-game Pip-Boy map |
 | `PipboyFogStrength` | 0.85 | how heavy the fog looks at its densest |
 | `PipboyFogGrid` | 256 | cells across the map; higher looks less like a grid |
 
 Fog tuning lives in `viewer/foggymap/config.py`: `SIGHT_DISTANCE_UNITS`,
 `SIGHT_FRACTION`, `TILE_CELLS`, `POI_FOG_RADIUS_UNITS` and the tile thresholds.
+
+## Publishing your progress to the web
+
+Off unless you turn it on. The companion can publish a small static site showing your
+fog, your explored percentage, the locations you have discovered, and a replay of the
+path you walked. It pushes the site to a git repository you own, and whatever hosts that
+repository (AWS Amplify, GitHub Pages, Netlify) serves it. Nothing goes anywhere else.
+
+What gets published is deliberately limited:
+
+- the fog over a relief map drawn from the game's terrain heights, never the game's
+  map art;
+- only the locations you have discovered, each with an icon for its kind, so the page
+  gives nothing away;
+- your recorded path, as map coordinates.
+
+Visitors can zoom and pan the map. Hovering over a location shows its name and what
+kind of place it is.
+
+To turn it on, create `publish.ini` in `%LOCALAPPDATA%\FoggyMap` (or your `OutputDir`):
+
+```ini
+[Publish]
+Enabled=1
+; An empty repository you can push to. Git uses your existing credentials.
+Remote=https://github.com/<you>/<your-site-repo>.git
+Branch=main
+; Who the site's commits are by. Required: your global git identity is never used.
+AuthorName=<name to publish under>
+AuthorEmail=<email to publish under>
+; Minutes of play between publishes. It also publishes when the game exits.
+IntervalMinutes=60
+; Git=C:\Program Files\Git\cmd\git.exe
+; LeakCheck=0
+```
+
+Before you play, push to the repository once by hand, so any credential prompt happens
+then and not in the middle of a session. Then point your host at the repository's root.
+It needs no build step, and an `amplify.yml` is included for Amplify.
+
+How it behaves:
+
+- It publishes when the companion starts, if there is anything unpublished, and then
+  at most once per `IntervalMinutes` of play. It publishes only when your recorded data
+  has changed.
+- When the game exits, a separate process publishes one last time. If it cannot start,
+  the next launch catches up instead. Its output goes to `publish.log`.
+- Each publish replaces the repository's contents with a single commit, so the
+  repository never grows.
+- Before every push, the site is scanned for your Windows username and global git
+  identity. If either appears anywhere, the push is refused. `LeakCheck=0` turns the
+  scan off, if it ever blocks something harmless.
+- Failures are written to `companion.log` and never affect the fog in game.
+- An update to the page, or a relief map built since the last publish, also counts as
+  a change, so it reaches the site without waiting for you to walk somewhere.
+
+The page lives in `site/`. Its location icons come from [Lucide](https://lucide.dev)
+and are copied into `site/icons.js` by `tools/fetch_icons.py`. Rerun that tool after
+changing `MARKER_KINDS` in `viewer/foggymap/publish.py`; a test fails if an icon is
+missing.
 
 ## Known approximations
 

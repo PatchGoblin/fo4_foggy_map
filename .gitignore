@@ -25,6 +25,7 @@ plugin/.xmake/
 plugin/extern/
 
 # Scratch and machine-specific files
+.playwright-mcp/
 *.log
 scratch/
 local/

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wasteland Survey</title>
+<meta name="description" content="Where one Fallout 4 player has walked, recorded by the FoggyMap mod.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="survey">
+  <figure class="chart">
+    <canvas id="map" aria-label="Map of explored ground and the path walked. Scroll or pinch to zoom, drag to move."></canvas>
+    <div id="tip" class="tip" hidden></div>
+    <div class="zoom" role="group" aria-label="Zoom">
+      <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+      <button type="button" id="zoom-out" aria-label="Zoom out">&minus;</button>
+      <button type="button" id="zoom-fit" aria-label="Show the whole map">Fit</button>
+    </div>
+  </figure>
+
+  <section class="ledger">
+    <h1 id="title">Wasteland survey</h1>
+    <label class="picker" id="picker-wrap" hidden>
+      <span>Map</span>
+      <select id="picker"></select>
+    </label>
+
+    <div id="stats" class="stats" aria-live="polite"></div>
+
+    <div class="replay" id="replay" hidden>
+      <h2>Path walked</h2>
+      <div class="controls">
+        <button type="button" id="play">Replay</button>
+        <label class="speed"><span>Speed</span>
+          <select id="speed">
+            <option value="0.5">Slow</option>
+            <option value="1" selected>Normal</option>
+            <option value="3">Fast</option>
+          </select>
+        </label>
+      </div>
+      <input type="range" id="scrub" min="0" max="1000" value="1000" aria-label="Position in the replay">
+    </div>
+
+    <ul class="key">
+      <li><span class="swatch trail"></span>Path walked</li>
+      <li><span class="swatch fog"></span>Unexplored</li>
+      <li><span class="swatch mark"></span>Discovered location (hover for its name)</li>
+    </ul>
+
+    <footer>Recorded in-game by <a href="https://github.com/PatchGoblin/fo4_foggy_map">FoggyMap</a>, a Fallout 4 mod. The map is drawn from the game's terrain. Locations not yet discovered stay hidden. Icons by <a href="https://lucide.dev">Lucide</a>.</footer>
+  </section>
+</main>
+<script src="icons.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

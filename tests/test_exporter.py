@@ -135,3 +135,25 @@ def test_the_companion_polls_at_least_every_second():
     """Polling is a few stat calls; a slow poll only adds latency to the in-game fog."""
     default = inspect.signature(watch).parameters["interval"].default
     assert default <= 1.0
+
+
+class _Stop(Exception):
+    pass
+
+
+def test_watch_runs_the_tick_hook_on_every_pass_after_exporting(assets, data):
+    """The publisher rides the watch loop, after the fog files are current."""
+    events = []
+
+    def on_tick():
+        events.append(("tick", (data / "pipboy_Commonwealth.fog").exists()))
+
+    def sleep(_):
+        if len(events) == 3:
+            raise _Stop
+        events.append(("sleep", None))
+
+    with pytest.raises(_Stop):
+        watch(assets, data, on_tick=on_tick, sleep=sleep)
+
+    assert events[:3] == [("tick", True), ("sleep", None), ("tick", True)]

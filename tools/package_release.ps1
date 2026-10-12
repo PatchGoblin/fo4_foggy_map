@@ -45,6 +45,7 @@ $work = Join-Path $repo 'build\pyinstaller'
 & $python -m PyInstaller --noconfirm --clean --onedir --console `
     --name FoggyMapCompanion `
     --paths (Join-Path $repo 'viewer') `
+    --add-data "$(Join-Path $repo 'site');site" `
     --exclude-module PySide6 --exclude-module shiboken6 --exclude-module tkinter `
     --exclude-module matplotlib --exclude-module contourpy --exclude-module kiwisolver `
     --distpath (Join-Path $work 'dist') --workpath (Join-Path $work 'work') --specpath $work `
