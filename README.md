@@ -179,7 +179,15 @@ What gets published is deliberately limited:
   map art;
 - only the locations you have discovered, each with an icon for its kind, so the page
   gives nothing away;
-- your recorded path, as map coordinates.
+- your recorded path, as map coordinates;
+- your character: level and XP, SPECIAL, health and other stats, caps, perks,
+  magazines and bobbleheads, every item you carry, your quests, companion, playtime and
+  load order;
+- a timeline of levels, perks, quests, bobbleheads and discoveries, recorded as they
+  happen from the moment publishing is turned on.
+
+Your character's name is **not** published unless you set `ShowCharacterName=1`.
+Players often give the character their own first name.
 
 Visitors can zoom and pan the map. Hovering over a location shows its name and what
 kind of place it is.
@@ -197,6 +205,8 @@ AuthorName=<name to publish under>
 AuthorEmail=<email to publish under>
 ; Minutes of play between publishes. It also publishes when the game exits.
 IntervalMinutes=60
+; Publish the character's name too. Off by default.
+; ShowCharacterName=1
 ; Git=C:\Program Files\Git\cmd\git.exe
 ; LeakCheck=0
 ```
@@ -223,7 +233,7 @@ How it behaves:
 
 The page lives in `site/`. Its location icons come from [Lucide](https://lucide.dev)
 and are copied into `site/icons.js` by `tools/fetch_icons.py`. Rerun that tool after
-changing `MARKER_KINDS` in `viewer/foggymap/publish.py`; a test fails if an icon is
+changing `MARKER_KINDS` in `viewer/foggymap/markers.py`; a test fails if an icon is
 missing.
 
 ## Known approximations

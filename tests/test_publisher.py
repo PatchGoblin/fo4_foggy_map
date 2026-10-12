@@ -261,3 +261,35 @@ def test_a_new_page_or_rebuilt_assets_count_as_changes(dirs, tmp_path):
     (assets / "worldspaces.json").write_text(json.dumps({"Commonwealth": {"relief": "r.png"}}))
     assert publisher.tick() is True
     assert len(push.calls) == 3
+
+
+def test_show_character_name_is_off_unless_set(tmp_path):
+    (tmp_path / "publish.ini").write_text("[Publish]\nEnabled=1\nRemote=r\n")
+    assert load_publish_config(tmp_path).show_character_name is False
+
+    (tmp_path / "publish.ini").write_text("[Publish]\nEnabled=1\nRemote=r\nShowCharacterName=1\n")
+    assert load_publish_config(tmp_path).show_character_name is True
+
+
+def test_the_setting_reaches_the_site_build(dirs):
+    build = Calls()
+    config = PublishConfig(remote="r", author_name="a", author_email="e", show_character_name=True)
+
+    _publisher(dirs, Clock(), build=build, config=config).tick()
+
+    assert build.calls[0][1]["show_character_name"] is True
+
+
+def test_the_timeline_updates_every_tick_even_between_publishes(dirs):
+    """Hourly publishing must not mean hourly timeline resolution."""
+    assets, data = dirs
+    clock = Clock()
+    publisher = _publisher(dirs, clock)
+    (data / "player.json").write_text(json.dumps({"character": {"level": 10}}))
+    publisher.tick()
+
+    (data / "player.json").write_text(json.dumps({"character": {"level": 11}}))
+    clock.now += 60
+    publisher.tick()
+
+    assert '"Reached level 11"' in (data / "timeline.jsonl").read_text()

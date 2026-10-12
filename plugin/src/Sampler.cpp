@@ -3,6 +3,7 @@
 #include "Config.h"
 #include "Game.h"
 #include "PipboyOverlay.h"
+#include "Player.h"
 #include "Recorder.h"
 #include "Sampler.h"
 
@@ -105,6 +106,7 @@ namespace FoggyMap::Sampler
 					tasks->AddTask([]() {
 						Capture();
 						RefreshMarkers();
+						Player::Refresh();
 						PipboyOverlay::Draw();
 					});
 				}

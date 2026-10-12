@@ -55,17 +55,6 @@ namespace FoggyMap::Companion
 			return buffer;
 		}
 
-		// Our own DLL, found from an address inside it. Under MO2 this is the virtual
-		// Data\F4SE\Plugins path, which MO2's VFS also resolves for the child process.
-		std::filesystem::path PluginDirectory()
-		{
-			HMODULE self{ nullptr };
-			GetModuleHandleExW(
-				GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-				reinterpret_cast<LPCWSTR>(&PluginDirectory), &self);
-			return ModulePath(self).parent_path();
-		}
-
 		std::filesystem::path GameDataDirectory()
 		{
 			return ModulePath(nullptr).parent_path() / L"Data";
@@ -84,6 +73,15 @@ namespace FoggyMap::Companion
 			text.append(trailing, L'\\');
 			return L"\"" + text + L"\"";
 		}
+	}
+
+	std::filesystem::path PluginDirectory()
+	{
+		HMODULE self{ nullptr };
+		GetModuleHandleExW(
+			GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+			reinterpret_cast<LPCWSTR>(&PluginDirectory), &self);
+		return ModulePath(self).parent_path();
 	}
 
 	void Launch()

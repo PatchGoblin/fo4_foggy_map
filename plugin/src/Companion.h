@@ -9,5 +9,9 @@ namespace FoggyMap
 		// Launched minimised and without focus, so a fullscreen or ENB session is
 		// never interrupted. Does nothing if disabled or already running.
 		void Launch();
+
+		// The folder our DLL was loaded from. Under MO2 this is the virtual
+		// Data\F4SE\Plugins path, which MO2's VFS also resolves for child processes.
+		std::filesystem::path PluginDirectory();
 	}
 }

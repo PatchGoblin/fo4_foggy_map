@@ -1,10 +1,11 @@
-"""Regenerate site/icons.js: the Lucide icons the published map uses for locations.
+"""Regenerate site/icons.js: the Lucide icons the published page uses for locations and
+timeline events.
 
     python tools/fetch_icons.py
 
 The icons are copied into the site rather than loaded from a CDN, so the page has no
-third-party dependency at view time. Rerun this after changing ``MARKER_KINDS``; a test
-fails if the page is missing an icon the table names.
+third-party dependency at view time. Rerun this after changing ``MARKER_KINDS`` or the
+timeline's ``ICONS``; a test fails if the page is missing an icon either names.
 """
 
 from __future__ import annotations
@@ -17,14 +18,17 @@ import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "viewer"))
 
-from foggymap.publish import MARKER_KINDS, UNKNOWN_KIND, default_template_dir  # noqa: E402
+from foggymap.history import ICONS as TIMELINE_ICONS  # noqa: E402
+from foggymap.markers import MARKER_KINDS, UNKNOWN_KIND  # noqa: E402
+from foggymap.publish import default_template_dir  # noqa: E402
 
 LUCIDE_VERSION = "0.460.0"
 BASE_URL = "https://cdn.jsdelivr.net/npm/lucide-static@{version}"
 
 
 def icon_names() -> list[str]:
-    return sorted({icon for icon, _ in MARKER_KINDS.values()} | {UNKNOWN_KIND[0]})
+    return sorted({icon for icon, _ in MARKER_KINDS.values()} | {UNKNOWN_KIND[0]}
+                  | set(TIMELINE_ICONS.values()))
 
 
 def svg_body(svg: str) -> str:

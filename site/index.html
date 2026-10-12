@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wasteland Survey</title>
-<meta name="description" content="Where one Fallout 4 player has walked, recorded by the FoggyMap mod.">
+<meta name="description" content="One Fallout 4 playthrough: where they walked, who they became, and what they carry. Recorded by the FoggyMap mod.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:,">
 </head>
 <body>
 <main class="survey">
@@ -35,6 +36,9 @@
       <h2>Path walked</h2>
       <div class="controls">
         <button type="button" id="play">Replay</button>
+        <button type="button" id="skip" class="secondary">Skip to end</button>
+      </div>
+      <div class="controls">
         <label class="speed"><span>Speed</span>
           <select id="speed">
             <option value="0.5">Slow</option>
@@ -44,6 +48,10 @@
         </label>
       </div>
       <input type="range" id="scrub" min="0" max="1000" value="1000" aria-label="Position in the replay">
+      <div class="loop-row">
+        <label class="loop"><input type="checkbox" id="loop"> Loop the replay</label>
+        <span id="loop-status" class="loop-status" aria-live="polite"></span>
+      </div>
     </div>
 
     <ul class="key">
@@ -52,10 +60,14 @@
       <li><span class="swatch mark"></span>Discovered location (hover for its name)</li>
     </ul>
 
+    <nav class="contents" id="contents" aria-label="Playthrough" hidden></nav>
+
     <footer>Recorded in-game by <a href="https://github.com/PatchGoblin/fo4_foggy_map">FoggyMap</a>, a Fallout 4 mod. The map is drawn from the game's terrain. Locations not yet discovered stay hidden. Icons by <a href="https://lucide.dev">Lucide</a>.</footer>
   </section>
 </main>
+<div class="dossier" id="dossier" hidden></div>
 <script src="icons.js"></script>
 <script src="app.js"></script>
+<script src="dossier.js"></script>
 </body>
 </html>

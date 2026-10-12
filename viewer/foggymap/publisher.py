@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from foggymap.gitpublish import PublishError, push_site
+from foggymap.history import EVENTS_FILE, Timeline
 from foggymap.pipeline import MANIFEST_NAME, load_manifest
 from foggymap.publish import build_site, default_template_dir
 
@@ -38,6 +39,8 @@ class PublishConfig:
     interval_minutes: float = 60.0
     git: str = "git"
     leak_check: bool = True
+    # Off by default: players often give the character their own first name.
+    show_character_name: bool = False
 
 
 def load_publish_config(data_dir) -> PublishConfig | None:
@@ -71,6 +74,7 @@ def load_publish_config(data_dir) -> PublishConfig | None:
         interval_minutes=interval,
         git=section.get("Git", "git").strip() or "git",
         leak_check=_truthy(section.get("LeakCheck", "1")),
+        show_character_name=_truthy(section.get("ShowCharacterName", "0")),
     )
 
 
@@ -88,11 +92,15 @@ class Publisher:
         self._build = build
         self._push = push
         self._template_dir = str(template_dir or default_template_dir())
+        self._timeline = Timeline(data_dir)
         self._root = os.path.join(str(data_dir), "publish")
         self._next_due: float | None = None  # None: due now
 
     def tick(self) -> bool:
-        """Publish if the interval is up and the data changed. True if it published."""
+        """Keep the timeline current, then publish if the interval is up and the data
+        changed. True if it published. The timeline runs every tick so its events are
+        timed to the plugin's 30-second snapshots, not to the hourly publish."""
+        self._timeline.update(self._now())
         if self._next_due is not None and self._clock() < self._next_due:
             return False
         return self.publish_if_changed()
@@ -125,7 +133,8 @@ class Publisher:
         staging = os.path.join(self._root, "staging")
         shutil.rmtree(staging, ignore_errors=True)
         self._build(self._assets_dir, self._data_dir, staging, self._now(),
-                    template_dir=self._template_dir)
+                    template_dir=self._template_dir,
+                    show_character_name=self._config.show_character_name)
         self._push(
             staging_dir=staging,
             repo_dir=os.path.join(self._root, "repo.git"),
@@ -147,7 +156,7 @@ class Publisher:
         """
         names = [f"path_{editor_id}.csv" for editor_id in load_manifest(self._assets_dir)]
         sources = [(name, os.path.join(str(self._data_dir), name))
-                   for name in sorted(names) + ["markers.csv"]]
+                   for name in sorted(names) + ["markers.csv", "player.json", EVENTS_FILE]]
         sources.append((MANIFEST_NAME, os.path.join(str(self._assets_dir), MANIFEST_NAME)))
         for folder, _, files in sorted(os.walk(self._template_dir)):
             for file in sorted(files):

@@ -39,7 +39,7 @@ def test_the_script_carries_the_licence_and_every_icon():
 
 
 def test_the_names_cover_every_marker_kind_and_the_fallback():
-    from foggymap.publish import MARKER_KINDS
+    from foggymap.markers import MARKER_KINDS
 
     names = icon_names()
 
@@ -63,3 +63,9 @@ def test_fetches_each_icon_and_the_licence_from_the_pinned_release():
         "https://cdn.jsdelivr.net/npm/lucide-static@0.460.0/LICENSE",
     ]
     assert '"map-pin":' in script and "ISC License" in script
+
+
+def test_the_names_cover_the_timeline_icons():
+    from foggymap.history import ICONS
+
+    assert set(ICONS.values()) <= set(icon_names())

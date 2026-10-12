@@ -20,10 +20,12 @@ from PIL import Image
 
 from foggymap.config import MAX_SEGMENT_UNITS
 from foggymap.grid import Grid
-from foggymap.markers import load_pois
+from foggymap.history import load_events
+from foggymap.markers import load_pois, marker_kind
 from foggymap.paths import Sample, load_samples
 from foggymap.pipboy import fog_opacity
 from foggymap.pipeline import Settings, load_manifest, load_worldspace, render
+from foggymap.player import load_player, public_profile, redact
 
 # The full map resolution, so the fog stays crisp when the page is zoomed in. It
 # compresses to almost nothing: the fog has only a few levels.
@@ -32,76 +34,6 @@ MAX_FOG_PX = 2048
 # Lossy but visually clean, and a fraction of the size of a PNG of shaded terrain.
 RELIEF_QUALITY = 82
 
-# What each map marker type is, as an icon (a Lucide name; see tools/fetch_icons.py)
-# and a word for the hover label. Grouped from the names the game gives each type.
-MARKER_KINDS: dict[int, tuple[str, str]] = {
-    0: ("mountain", "Cave"),
-    1: ("building-2", "Apartments"),
-    2: ("star", "City"),
-    3: ("house", "House"),
-    4: ("warehouse", "Workshop"),
-    5: ("landmark", "Landmark"),
-    6: ("train-front", "Metro station"),
-    7: ("shield", "Military base"),
-    8: ("flag", "Landmark"),
-    9: ("store", "Shop"),
-    10: ("house", "Neighbourhood"),
-    11: ("building", "Ruins"),
-    12: ("house", "Settlement"),
-    13: ("map-pin", "Settlement"),
-    14: ("construction", "Tunnel"),
-    15: ("cog", "Vault"),
-    16: ("plane", "Aircraft"),
-    17: ("landmark", "Monument"),
-    18: ("caravan", "Trailer park"),
-    19: ("construction", "Bridge"),
-    20: ("church", "Church"),
-    22: ("clock", "Tower"),
-    23: ("clapperboard", "Entertainment"),
-    24: ("construction", "Overpass"),
-    25: ("landmark", "Landmark"),
-    26: ("wheat", "Farm"),
-    27: ("fuel", "Filling station"),
-    28: ("trees", "Park"),
-    29: ("hotel", "Hotel"),
-    30: ("cross", "Cemetery"),
-    31: ("hospital", "Hospital"),
-    32: ("zap", "Power plant"),
-    33: ("factory", "Factory"),
-    35: ("fish", "Fishery"),
-    36: ("trash-2", "Junkyard"),
-    37: ("telescope", "Lookout"),
-    38: ("anchor", "Harbour"),
-    39: ("droplets", "Lake"),
-    40: ("pickaxe", "Quarry"),
-    41: ("radiation", "Crater"),
-    42: ("radio-tower", "Radio tower"),
-    43: ("skull", "Museum"),
-    44: ("school", "School"),
-    45: ("ship", "Shipwreck"),
-    47: ("bird", "Pond"),
-    49: ("ferris-wheel", "Amusement park"),
-    51: ("shirt", "Shop"),
-    52: ("package", "Bunker"),
-    53: ("castle", "Fort"),
-    54: ("building-2", "Office tower"),
-    55: ("sailboat", "Raider fleet"),
-    56: ("building", "Roadside stop"),
-    58: ("siren", "Police station"),
-    61: ("train-front", "Station"),
-    62: ("satellite-dish", "Satellite array"),
-    63: ("rocket", "Missile silo"),
-    64: ("ship", "Ship"),
-    66: ("utensils", "Restaurant"),
-    70: ("rocket", "Arcade"),
-    73: ("train-front", "Station"),
-    74: ("ferris-wheel", "Ride"),
-    75: ("paw-print", "Safari"),
-    78: ("mountain", "Mountain"),
-    79: ("building", "Parlour"),
-    80: ("music", "Amphitheatre"),
-}
-UNKNOWN_KIND = ("map-pin", "Location")
 
 
 def default_template_dir() -> str:
@@ -116,7 +48,7 @@ def default_template_dir() -> str:
 
 def build_site(
     assets_dir, data_dir, out_dir, now: datetime,
-    template_dir=None, settings: Settings | None = None,
+    template_dir=None, settings: Settings | None = None, show_character_name: bool = False,
 ) -> list[str]:
     """Write the whole site into ``out_dir``, returning the worldspaces published.
 
@@ -140,13 +72,19 @@ def build_site(
         except Exception as error:  # noqa: BLE001 - one bad map must not stop the others
             print(f"skipped {editor_id}: {type(error).__name__}: {error}", flush=True)
 
+    # The character, if the plugin has written one: the name stays out unless asked for.
+    player = load_player(data_dir)
+    summary["player"] = player is not None
+    if player is not None:
+        _write_json(os.path.join(out_dir, "data", "player.json"),
+                    public_profile(player, show_name=show_character_name))
+        events = load_events(data_dir)
+        if not show_character_name:
+            events = redact(events, (player.get("character") or {}).get("name") or "")
+        _write_json(os.path.join(out_dir, "data", "timeline.json"), events)
+
     _write_json(os.path.join(out_dir, "data", "summary.json"), summary)
     return list(summary["worldspaces"])
-
-
-def marker_kind(marker_type: int) -> tuple[str, str]:
-    """(icon, label) for a map marker type, or a plain pin for one we have not named."""
-    return MARKER_KINDS.get(marker_type, UNKNOWN_KIND)
 
 
 def path_runs(
@@ -239,6 +177,9 @@ def _publish_worldspace(assets_dir, data_dir, editor_id, out, settings) -> dict:
         "samples": fog.sample_count,
         "last_position": last,
         "relief": bool(relief),
+        # How far around the path counts as seen, so the replay can uncover the map
+        # the way the real fog was built.
+        "reveal_radius_px": round(settings.area_radius / grid.units_per_px_x, 2),
     }
 
 
