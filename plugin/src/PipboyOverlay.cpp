@@ -17,14 +17,12 @@ namespace FoggyMap::PipboyOverlay
 		bool                                           g_drawn{ false };
 		std::optional<std::filesystem::file_time_type> g_drawnStamp;
 
-		// Diagnostics for the map art sometimes going missing behind the fog. Each
-		// opening's report is kept, so good and bad openings can be compared.
+		// Each opening's report is kept, so a bad opening can be compared with good ones.
 		constexpr std::size_t                 kKeptOpenings{ 20 };
-		constexpr int                         kFollowUpTicks{ 3 };
 		bool                                  g_open{ false };
+		bool                                  g_waitNoted{ false };
 		std::uint32_t                         g_opening{ 0 };
 		std::chrono::steady_clock::time_point g_openedAt{};
-		int                                   g_followUps{ 0 };
 		std::deque<std::vector<std::string>>  g_history;
 
 		// The map's own coordinate space, from TextureHolder_mc's reported dimensions.
@@ -227,74 +225,65 @@ namespace FoggyMap::PipboyOverlay
 			return error ? std::nullopt : std::optional{ stamp };
 		}
 
-		std::string Describe(const Scaleform::GFx::Value& a_value)
-		{
-			if (a_value.IsString()) {
-				return a_value.GetString();
-			}
-			if (a_value.IsNumber()) {
-				return std::format("{:.1f}", a_value.GetNumber());
-			}
-			if (a_value.IsInt()) {
-				return std::to_string(a_value.GetInt());
-			}
-			if (a_value.IsUInt()) {
-				return std::to_string(a_value.GetUInt());
-			}
-			if (a_value.IsBoolean()) {
-				return a_value.GetBoolean() ? "true" : "false";
-			}
-			if (a_value.IsObject()) {
-				return "object";
-			}
-			return a_value.IsUndefined() ? "undefined" : "?";
-		}
-
-		std::string MemberOf(Scaleform::GFx::Value& a_object, const char* a_name)
-		{
-			Scaleform::GFx::Value member;
-			return a_object.GetMember(a_name, std::addressof(member)) ? Describe(member) : "-";
-		}
-
-		// What the texture holder contains, so a missing map image can be told apart from
-		// one that is present but hidden, or one that arrives after the fog.
-		void ListChildren(
-			Scaleform::GFx::Value&    a_holder,
-			std::string_view          a_label,
-			std::vector<std::string>& a_report)
+		std::int32_t ChildCount(Scaleform::GFx::Value& a_holder)
 		{
 			Scaleform::GFx::Value count;
 			if (!a_holder.GetMember("numChildren", std::addressof(count))) {
-				a_report.emplace_back(std::format("{}: numChildren unavailable", a_label));
-				return;
+				return 0;
 			}
 			// Scaleform reports numChildren as kInt, not kNumber.
-			const auto children = count.IsInt()    ? count.GetInt() :
-			                      count.IsNumber() ? static_cast<std::int32_t>(count.GetNumber()) :
-			                                         -1;
-			a_report.emplace_back(std::format("{}: {} children", a_label, children));
+			return count.IsInt()    ? count.GetInt() :
+			       count.IsNumber() ? static_cast<std::int32_t>(count.GetNumber()) :
+			                          0;
+		}
 
-			for (std::int32_t index = 0; index < std::min(children, 32); ++index) {
-				Scaleform::GFx::Value argument[1];
-				argument[0] = index;
-				Scaleform::GFx::Value child;
-				if (!a_holder.Invoke("getChildAt", std::addressof(child), argument, 1) ||
-					!child.IsObject()) {
-					a_report.emplace_back(std::format("  [{}] unreadable", index));
+		Scaleform::GFx::Value ChildAt(Scaleform::GFx::Value& a_holder, std::int32_t a_index)
+		{
+			Scaleform::GFx::Value argument[1];
+			argument[0] = a_index;
+			Scaleform::GFx::Value child;
+			a_holder.Invoke("getChildAt", std::addressof(child), argument, 1);
+			return child;
+		}
+
+		std::string NameOf(Scaleform::GFx::Value& a_child)
+		{
+			Scaleform::GFx::Value name;
+			return a_child.GetMember("name", std::addressof(name)) && name.IsString() ?
+			           name.GetString() :
+			           "?";
+		}
+
+		// The map art is a Bitmap the map page adds to the texture holder itself, and it
+		// is not always there yet when the page first appears. If the fog is added first,
+		// the page never adds its image at all: the fog is drawn over a blank map until
+		// the Pip-Boy is reopened. So the fog waits for any child that is not our own.
+		bool HasMapImage(Scaleform::GFx::Value& a_holder)
+		{
+			for (std::int32_t index = 0; index < ChildCount(a_holder); ++index) {
+				auto child = ChildAt(a_holder, index);
+				if (child.IsObject() && NameOf(child) != kOverlayName) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		// One line naming what the texture holder contains, e.g. "[object Bitmap] instance9".
+		std::string Contents(Scaleform::GFx::Value& a_holder)
+		{
+			std::string out = std::format("holder has {} children", ChildCount(a_holder));
+			for (std::int32_t index = 0; index < ChildCount(a_holder); ++index) {
+				auto child = ChildAt(a_holder, index);
+				if (!child.IsObject()) {
 					continue;
 				}
 				Scaleform::GFx::Value text;
 				child.Invoke("toString", std::addressof(text), nullptr, 0);
-				a_report.emplace_back(std::format(
-					"  [{}] {} name={} size={}x{} visible={} alpha={}",
-					index,
-					Describe(text),
-					MemberOf(child, "name"),
-					MemberOf(child, "width"),
-					MemberOf(child, "height"),
-					MemberOf(child, "visible"),
-					MemberOf(child, "alpha")));
+				out += std::format(
+					"; {} {}", text.IsString() ? text.GetString() : "?", NameOf(child));
 			}
+			return out;
 		}
 
 		// Adds this tick's lines to the current opening and rewrites the report, which
@@ -351,7 +340,7 @@ namespace FoggyMap::PipboyOverlay
 			// Pip-Boy closed; draw again next time it opens
 			g_open = false;
 			g_drawn = false;
-			g_followUps = 0;
+			g_waitNoted = false;
 			return;
 		}
 		if (!g_open) {
@@ -372,24 +361,23 @@ namespace FoggyMap::PipboyOverlay
 		const auto stamp = StampOf(fogPath);
 
 		if (g_drawn && stamp == g_drawnStamp) {
-			if (g_followUps > 0) {
-				--g_followUps;
-				std::vector<std::string> report;
-				ListChildren(textureHolder, "later", report);
-				WriteReport(report);
-			}
 			return;
+		}
+		if (!HasMapImage(textureHolder)) {
+			if (!g_waitNoted) {
+				g_waitNoted = true;
+				WriteReport({ "waiting for the map image: " + Contents(textureHolder) });
+			}
+			return;  // retried next tick
 		}
 
 		// From here on, a failure is structural rather than a matter of timing, so it is
 		// recorded and not retried until the fog file changes.
 		g_drawn = true;
 		g_drawnStamp = stamp;
-		g_followUps = kFollowUpTicks;
 		const auto started = std::chrono::steady_clock::now();
 
-		std::vector<std::string> report;
-		ListChildren(textureHolder, "before draw", report);
+		std::vector<std::string> report{ Contents(textureHolder) };
 		const auto fog = ReadFogFile(fogPath);
 		if (!fog.Valid()) {
 			report.emplace_back(std::format("no usable fog file for {} yet", worldspace));
@@ -406,7 +394,6 @@ namespace FoggyMap::PipboyOverlay
 
 		report.emplace_back(std::format("worldspace = {}", worldspace));
 		DrawRectangles(*movie, textureHolder, grid, report);
-		ListChildren(textureHolder, "after draw", report);
 		report.emplace_back(std::format(
 			"draw took {} ms",
 			std::chrono::duration_cast<std::chrono::milliseconds>(
