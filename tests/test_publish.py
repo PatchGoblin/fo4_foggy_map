@@ -346,3 +346,38 @@ def test_a_hidden_name_is_redacted_from_the_timeline(assets, data, tmp_path, tem
     out, _ = _build(assets, data, tmp_path, template)
 
     assert _read(out / "data" / "timeline.json")[0]["text"] == "Started [name]'s Revenge"
+
+
+def _mo2_profile(tmp_path):
+    profile = tmp_path / "mo2" / "profiles" / "Main"
+    profile.mkdir(parents=True)
+    (profile / "modlist.txt").write_text("+Texture Pack\n-Looks_separator\n", encoding="utf-8")
+    return profile
+
+
+def test_the_mo2_mod_list_is_published_when_a_profile_is_set(assets, data, tmp_path, template):
+    _player(data)
+    out = tmp_path / "out"
+
+    build_site(assets, data, out, NOW, template_dir=template, mo2_profile=_mo2_profile(tmp_path))
+
+    mo2 = _read(out / "data" / "player.json")["mods"]["mo2"]
+    assert mo2["groups"] == [{"label": "Looks", "mods": [{"name": "Texture Pack", "plugins": [], "dlls": []}]}]
+
+
+def test_without_a_profile_the_mod_list_is_the_load_order_alone(assets, data, tmp_path, template):
+    _player(data)
+
+    out, _ = _build(assets, data, tmp_path, template)
+
+    assert "mo2" not in _read(out / "data" / "player.json")["mods"]
+
+
+def test_an_unreadable_profile_falls_back_to_the_load_order(assets, data, tmp_path, template, capsys):
+    _player(data)
+    out = tmp_path / "out"
+
+    build_site(assets, data, out, NOW, template_dir=template, mo2_profile=tmp_path / "no such profile")
+
+    assert "mo2" not in _read(out / "data" / "player.json")["mods"]
+    assert "MO2 profile" in capsys.readouterr().out

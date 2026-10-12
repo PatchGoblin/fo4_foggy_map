@@ -22,6 +22,7 @@ from foggymap.config import MAX_SEGMENT_UNITS
 from foggymap.grid import Grid
 from foggymap.history import load_events
 from foggymap.markers import load_pois, marker_kind
+from foggymap.mo2 import read_profile
 from foggymap.paths import Sample, load_samples
 from foggymap.pipboy import fog_opacity
 from foggymap.pipeline import Settings, load_manifest, load_worldspace, render
@@ -49,6 +50,7 @@ def default_template_dir() -> str:
 def build_site(
     assets_dir, data_dir, out_dir, now: datetime,
     template_dir=None, settings: Settings | None = None, show_character_name: bool = False,
+    mo2_profile=None,
 ) -> list[str]:
     """Write the whole site into ``out_dir``, returning the worldspaces published.
 
@@ -76,8 +78,12 @@ def build_site(
     player = load_player(data_dir)
     summary["player"] = player is not None
     if player is not None:
-        _write_json(os.path.join(out_dir, "data", "player.json"),
-                    public_profile(player, show_name=show_character_name))
+        profile = public_profile(player, show_name=show_character_name)
+        if mo2_profile:
+            mo2 = _mo2_mods(mo2_profile)
+            if mo2 is not None:
+                profile["mods"]["mo2"] = mo2
+        _write_json(os.path.join(out_dir, "data", "player.json"), profile)
         events = load_events(data_dir)
         if not show_character_name:
             events = redact(events, (player.get("character") or {}).get("name") or "")
@@ -85,6 +91,17 @@ def build_site(
 
     _write_json(os.path.join(out_dir, "data", "summary.json"), summary)
     return list(summary["worldspaces"])
+
+
+def _mo2_mods(profile_dir) -> dict | None:
+    """Every enabled mod from the MO2 profile, or None -- with the reason printed -- so
+    an unreadable profile costs only the fuller list, never the publish."""
+    try:
+        return read_profile(profile_dir)
+    except (OSError, UnicodeDecodeError) as error:
+        print(f"could not read the MO2 profile, listing the load order only: "
+              f"{type(error).__name__}: {error}", flush=True)
+        return None
 
 
 def path_runs(

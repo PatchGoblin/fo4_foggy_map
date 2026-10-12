@@ -41,6 +41,9 @@ class PublishConfig:
     leak_check: bool = True
     # Off by default: players often give the character their own first name.
     show_character_name: bool = False
+    # An MO2 profile folder. Set, the page lists every enabled mod as MO2 does; unset,
+    # only the plugins and DLLs the game loaded.
+    mo2_profile: str = ""
 
 
 def load_publish_config(data_dir) -> PublishConfig | None:
@@ -75,6 +78,7 @@ def load_publish_config(data_dir) -> PublishConfig | None:
         git=section.get("Git", "git").strip() or "git",
         leak_check=_truthy(section.get("LeakCheck", "1")),
         show_character_name=_truthy(section.get("ShowCharacterName", "0")),
+        mo2_profile=section.get("MO2Profile", "").strip().strip('"'),
     )
 
 
@@ -134,7 +138,8 @@ class Publisher:
         shutil.rmtree(staging, ignore_errors=True)
         self._build(self._assets_dir, self._data_dir, staging, self._now(),
                     template_dir=self._template_dir,
-                    show_character_name=self._config.show_character_name)
+                    show_character_name=self._config.show_character_name,
+                    mo2_profile=self._config.mo2_profile or None)
         self._push(
             staging_dir=staging,
             repo_dir=os.path.join(self._root, "repo.git"),
@@ -158,6 +163,8 @@ class Publisher:
         sources = [(name, os.path.join(str(self._data_dir), name))
                    for name in sorted(names) + ["markers.csv", "player.json", EVENTS_FILE]]
         sources.append((MANIFEST_NAME, os.path.join(str(self._assets_dir), MANIFEST_NAME)))
+        if self._config.mo2_profile:
+            sources.append(("modlist.txt", os.path.join(self._config.mo2_profile, "modlist.txt")))
         for folder, _, files in sorted(os.walk(self._template_dir)):
             for file in sorted(files):
                 path = os.path.join(folder, file)

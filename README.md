@@ -186,6 +186,10 @@ What gets published is deliberately limited:
 - a timeline of levels, perks, quests, bobbleheads and discoveries, recorded as they
   happen from the moment publishing is turned on.
 
+Set `MO2Profile` and the mod list becomes every mod you have enabled in Mod Organizer
+2, grouped by your separators, including texture, UI and script mods that have no
+plugin. Only the mod names and their plugin and DLL file names are published.
+
 Your character's name is **not** published unless you set `ShowCharacterName=1`.
 Players often give the character their own first name.
 
@@ -207,6 +211,9 @@ AuthorEmail=<email to publish under>
 IntervalMinutes=60
 ; Publish the character's name too. Off by default.
 ; ShowCharacterName=1
+; List every enabled Mod Organizer 2 mod, grouped by your separators. Without it the
+; page lists only the plugins and F4SE DLLs the game loaded.
+; MO2Profile=D:\Modding\<instance>\profiles\<profile>
 ; Git=C:\Program Files\Git\cmd\git.exe
 ; LeakCheck=0
 ```

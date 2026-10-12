@@ -293,3 +293,28 @@ def test_the_timeline_updates_every_tick_even_between_publishes(dirs):
     publisher.tick()
 
     assert '"Reached level 11"' in (data / "timeline.jsonl").read_text()
+
+
+def test_mo2_profile_is_read_from_publish_ini(tmp_path):
+    (tmp_path / "publish.ini").write_text(
+        "[Publish]\nEnabled=1\nRemote=r\nMO2Profile=D:\Modding\Some Instance\profiles\Main\n")
+
+    assert load_publish_config(tmp_path).mo2_profile == "D:\Modding\Some Instance\profiles\Main"
+    (tmp_path / "publish.ini").write_text("[Publish]\nEnabled=1\nRemote=r\n")
+    assert load_publish_config(tmp_path).mo2_profile == ""
+
+
+def test_the_profile_reaches_the_build_and_its_changes_republish(dirs, tmp_path):
+    profile = tmp_path / "profile"
+    profile.mkdir()
+    (profile / "modlist.txt").write_text("+One\n")
+    config = PublishConfig(remote="r", author_name="a", author_email="e", mo2_profile=str(profile))
+    clock, build = Clock(), Calls()
+    publisher = _publisher(dirs, clock, build=build, config=config)
+    publisher.tick()
+
+    clock.now += 2 * HOUR
+    (profile / "modlist.txt").write_text("+One\n+Two\n")
+
+    assert publisher.tick() is True
+    assert build.calls[0][1]["mo2_profile"] == str(profile)

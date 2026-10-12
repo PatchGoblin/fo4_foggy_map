@@ -217,7 +217,26 @@
     const f4se = (m.f4se || []).length ? el("details", {},
       el("summary", {}, "Script extender plugins", el("span", { class: "count" }, String(m.f4se.length))),
       el("ul", { class: "load-order" }, m.f4se.map((dll) => el("li", {}, el("span", {}, dll))))) : null;
-    return section("mods", "Mods", el("p", { class: "lede" }, `${total} plugins, in load order.`), blocks, f4se);
+
+    if (!m.mo2) {
+      return section("mods", "Mods", el("p", { class: "lede" }, `${total} plugins, in load order.`), blocks, f4se);
+    }
+    // Every enabled mod as Mod Organizer lists it, grouped by the player's separators,
+    // with the plugins and DLLs each one brings. The load order follows for detail.
+    const mo2 = m.mo2.groups.map((group) => el("details", {},
+      el("summary", {}, group.label, el("span", { class: "count" }, String(group.mods.length))),
+      el("ul", { class: "mod-list" }, group.mods.map((mod) => el("li", {},
+        el("span", {}, mod.name),
+        mod.plugins.length || mod.dlls.length
+          ? el("span", { class: "files" }, [...mod.plugins, ...mod.dlls].join(", "))
+          : null)))));
+    const unmanaged = (m.mo2.unmanaged || []).length ? el("details", {},
+      el("summary", {}, "DLC and Creation Club", el("span", { class: "count" }, String(m.mo2.unmanaged.length))),
+      el("ul", { class: "mod-list" }, m.mo2.unmanaged.map((name) => el("li", {}, el("span", {}, name))))) : null;
+    return section("mods", "Mods",
+      el("p", { class: "lede" }, `${m.mo2.enabled} mods enabled in Mod Organizer, ${total} plugins in load order.`),
+      mo2, unmanaged,
+      el("h3", {}, "Load order"), blocks, f4se);
   }
 
   async function start() {

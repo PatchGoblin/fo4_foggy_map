@@ -288,3 +288,8 @@ summary:focus-visible { outline: 2px solid var(--trail); outline-offset: 2px; }
 
 .items, .load-order, .days { scrollbar-color: var(--rule) transparent; scrollbar-width: thin; }
 .lede { margin: -0.25rem 0 0.75rem; color: var(--mist); }
+
+.mod-list { list-style: none; margin: 0 0 0.5rem; padding: 0; max-height: 28rem; overflow-y: auto;
+  scrollbar-color: var(--rule) transparent; scrollbar-width: thin; }
+.mod-list li { padding: 0.2rem 0; overflow-wrap: anywhere; }
+.mod-list .files { display: block; color: var(--mist); font-size: 0.8125rem; }
