@@ -14,7 +14,7 @@
 <body>
 <main class="survey">
   <figure class="chart">
-    <canvas id="map" aria-label="Map of explored ground and the path walked. Scroll or pinch to zoom, drag to move."></canvas>
+    <canvas id="map" aria-label="Map of explored ground and the path walked. Scroll or pinch to zoom, drag to move, tap a location for its name."></canvas>
     <div id="tip" class="tip" hidden></div>
     <div class="zoom" role="group" aria-label="Zoom">
       <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
@@ -57,7 +57,7 @@
     <ul class="key">
       <li><span class="swatch trail"></span>Path walked</li>
       <li><span class="swatch fog"></span>Unexplored</li>
-      <li><span class="swatch mark"></span>Discovered location (hover for its name)</li>
+      <li><span class="swatch mark"></span>Discovered location (hover or tap for its name)</li>
     </ul>
 
     <nav class="contents" id="contents" aria-label="Playthrough" hidden></nav>

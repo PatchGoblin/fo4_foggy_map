@@ -249,6 +249,7 @@ function clampCamera() {
 // Zoom by ``factor`` keeping the map point under (x, y) canvas pixels where it is.
 function zoomAt(factor, x, y) {
   if (!view) return;
+  tip.hidden = true;
   const [col, row] = toMap(x, y);
   camera.zoom *= factor;
   clampCamera();
@@ -565,10 +566,26 @@ canvas.addEventListener("dblclick", (event) => {
 
 const pointers = new Map();
 let pinchDistance = 0;
+// Where the current gesture began, and whether it has turned into a drag or a pinch.
+// A gesture that stays put is a tap, which shows the nearest location's name -- the
+// only way to read one on a touch screen, where nothing hovers.
+let gesture = null;
+// How far, in CSS pixels, a finger may wander before a tap becomes a drag.
+const TAP_SLOP = 8;
+// A fingertip is far blunter than a mouse pointer, so taps reach further for a marker.
+const TOUCH_REACH = 24;
 
 canvas.addEventListener("pointerdown", (event) => {
-  canvas.setPointerCapture(event.pointerId);
+  // Capture keeps a drag going when the finger slides off the map. It throws for a
+  // pointer the browser no longer considers active, which must not cost the gesture.
+  try {
+    canvas.setPointerCapture(event.pointerId);
+  } catch {
+    // dragging still works while the pointer stays over the map
+  }
   pointers.set(event.pointerId, canvasPoint(event));
+  if (pointers.size === 1) gesture = { start: canvasPoint(event), tap: true };
+  else if (gesture) gesture.tap = false;
   if (pointers.size === 2) {
     const [a, b] = [...pointers.values()];
     pinchDistance = Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -582,6 +599,11 @@ canvas.addEventListener("pointermove", (event) => {
   const previous = pointers.get(event.pointerId);
   if (previous) {
     pointers.set(event.pointerId, point);
+    if (gesture && gesture.tap) {
+      const slop = TAP_SLOP * (canvas.width / canvas.clientWidth);
+      if (Math.hypot(point[0] - gesture.start[0], point[1] - gesture.start[1]) <= slop) return;
+      gesture.tap = false;
+    }
     tip.hidden = true;
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
@@ -601,18 +623,28 @@ canvas.addEventListener("pointermove", (event) => {
 });
 
 function release(event) {
+  const wasTap = event.type === "pointerup" && pointers.size === 1 && gesture && gesture.tap;
   pointers.delete(event.pointerId);
   if (pointers.size < 2) pinchDistance = 0;
-  if (pointers.size === 0) canvas.classList.remove("dragging");
+  if (pointers.size === 0) {
+    canvas.classList.remove("dragging");
+    gesture = null;
+  }
+  if (wasTap && view) showTip(canvasPoint(event), event.pointerType !== "mouse");
 }
 canvas.addEventListener("pointerup", release);
 canvas.addEventListener("pointercancel", release);
-canvas.addEventListener("pointerleave", () => { tip.hidden = true; });
+// Touch pointers "leave" as the finger lifts, which would hide a label the moment a
+// tap shows it; only a mouse leaving the map means the reader moved away.
+canvas.addEventListener("pointerleave", (event) => {
+  if (event.pointerType === "mouse") tip.hidden = true;
+});
 
-function showTip([x, y]) {
+function showTip([x, y], touch = false) {
   const ratio = window.devicePixelRatio || 1;
   let best = null;
   let bestDistance = markerSize(ratio) * 0.75;
+  if (touch) bestDistance = Math.max(bestDistance, TOUCH_REACH * ratio);
   const until = progress >= 1 ? Infinity : progress * view.runs.total;
   for (const m of view.markers) {
     if (m.revealAt > until) continue;  // not drawn yet, so not hoverable either
